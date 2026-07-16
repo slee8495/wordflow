@@ -56,15 +56,18 @@
 
 ## 시작하려면 (계정/API 키 체크리스트)
 
-아래는 전부 본인 인증이 필요해서 직접 만들어야 하는 것들이에요. 순서는 상관없어요.
+**완료됨** — `vercel link`로 `sl-studio` 팀의 `wordflow` 프로젝트(GitHub 리포 자동 연결됨)에 연결하고,
+`vercel integration add neon`으로 전용 Neon DB(`neon-fuchsia-yacht`)를 프로비저닝 + 연결 + `.env.local`로 pull까지
+끝냈어요. `vercel link`가 받아오는 `VERCEL_OIDC_TOKEN` 덕분에 AI Gateway(Claude 모델, TTS, 전사)는 별도 키 없이
+바로 동작 — `AI_GATEWAY_API_KEY`를 따로 만들 필요가 없었어요. 스키마도 push했고 시작용 커리큘럼 49개도 시딩 완료,
+`/api/today`·`/api/chat` 실제 호출까지 로컬에서 검증했어요.
 
-1. **Vercel 프로젝트 연결 + Neon Postgres**
-   - `vercel link`로 이 리포를 프로젝트에 연결 → Marketplace에서 Neon 추가 → `vercel env pull`로 `DATABASE_URL` 등 받기
-   - (`sl_sports`와 같은 패턴이라 Neon 대시보드에서 새 프로젝트 하나 더 만들면 됨)
-2. **AI Gateway** — Vercel 대시보드에서 AI Gateway 활성화하고 `AI_GATEWAY_API_KEY` 발급 (Claude/OpenAI 모델 라우팅 + TTS/전사에 사용)
-3. **NLT API** — https://api.nlt.to 에서 키 발급 (비상업적 무료)
-4. **API.Bible** — https://api.bible 가입 → Starter 플랜(무료) → `/bibles` 목록에서 **새번역(RNKSV)이 있는지 확인**. 없으면 개역개정으로 대체하고 `src/lib/bible.ts` 주석대로 passage ID 포맷 확인 필요
-5. **YouTube Data API v3** — Google Cloud Console에서 프로젝트 만들고 API 키 발급 (검색 quota 확인)
-6. **CRON_SECRET / APP_API_KEY** — 아무 랜덤 문자열이나 만들어서 Vercel 환경변수에 등록
+아래는 남은 것 중 본인 인증이 필요해서 직접 만들어야 하는 것들이에요 (순서 상관없음, 없어도 앱은 동작함 —
+본문/찬양/설교 링크만 비어있는 채로 진행됨):
 
-**최소로 필요한 건 `DATABASE_URL`(+ seed 실행)과 `AI_GATEWAY_API_KEY`** — 이 둘만 있으면 오늘의 말씀 생성이 동작해요. NLT/API.Bible/YouTube 키는 없어도 각 fetch가 실패를 catch해서 본문/링크 없이 진행되도록 되어 있으니, 나머지는 하나씩 채워가며 점진적으로 붙이면 됩니다.
+1. **NLT API** — https://api.nlt.to 에서 키 발급 (비상업적 무료) → `NLT_API_KEY`
+2. **API.Bible** — https://api.bible 가입 → Starter 플랜(무료) → `/bibles` 목록에서 **새번역(RNKSV)이 있는지 확인**. 없으면 개역개정으로 대체하고 `src/lib/bible.ts` 주석대로 passage ID 포맷 확인 필요 → `BIBLE_API_KEY`, `BIBLE_API_KO_BIBLE_ID`
+3. **YouTube Data API v3** — Google Cloud Console에서 프로젝트 만들고 API 키 발급 (검색 quota 확인) → `YOUTUBE_API_KEY`
+4. **CRON_SECRET / APP_API_KEY** — 아무 랜덤 문자열이나 만들어서 Vercel 환경변수에 등록 (배포 후 `/api/cron/generate-daily`, `/api/transcribe` 보호용)
+
+키를 하나씩 채워가며 `vercel env add <NAME>` → `vercel env pull`로 로컬에 반영하면 점진적으로 붙일 수 있어요.
