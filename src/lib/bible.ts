@@ -1,10 +1,9 @@
 // Fetches the day's passage text in both translations so it can be fed to Claude as source
 // material for the story/context/message write-up, and shown/read aloud to the user directly.
 //
-// NOTE: both integrations below are written from the publicly documented request shape, but
-// haven't been exercised against a live key yet (accounts need to be created first — see
-// README "API 키 체크리스트"). Re-verify the exact query params against each provider's docs
-// once a key exists, before relying on this in production.
+// NOTE: fetchNltPassage is verified working against a live key. fetchKoreanPassage's request
+// shape is still unverified — API.Bible's key rejected requests with "Invalid API key" during
+// setup (see README "API 키 체크리스트"); re-test once that's sorted out.
 
 const NLT_API_BASE = "https://api.nlt.to/api/passages";
 // American Bible Society's API.Bible — used for the Korean 새번역 (RNKSV) passage text.
@@ -23,7 +22,9 @@ export async function fetchNltPassage(reference: string): Promise<string> {
   const key = process.env.NLT_API_KEY;
   if (!key) throw new Error("NLT_API_KEY is not set");
 
-  const url = `${NLT_API_BASE}?ref=${encodeURIComponent(reference)}&key=${key}&version=NLT&json=1`;
+  // Confirmed against a live key: this always returns HTML regardless of a `json` param, so
+  // stripHtml() below is load-bearing, not just a safety net.
+  const url = `${NLT_API_BASE}?ref=${encodeURIComponent(reference)}&key=${key}&version=NLT`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`NLT API request failed: ${res.status}`);
   const body = await res.text();
