@@ -58,7 +58,10 @@ export const readings = pgTable(
     historicalContext: text("historical_context").notNull(),
     personalMessage: text("personal_message").notNull(),
 
-    passageTextKo: text("passage_text_ko"),
+    // Claude-rendered Korean text (no reliable Bible API for 새번역 — see src/lib/bible.ts),
+    // kept in both a verse-numbered form and a continuous-story form so the UI can offer either.
+    passageTextKoVerses: text("passage_text_ko_verses"),
+    passageTextKoStory: text("passage_text_ko_story"),
     passageTextEn: text("passage_text_en"),
 
     worshipLinks: jsonb("worship_links").$type<WorshipLink[]>().default([]),

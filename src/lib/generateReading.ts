@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings, type Profile } from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
-import { fetchNltPassage, fetchKoreanPassage } from "@/lib/bible";
+import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs, searchSermons } from "@/lib/youtube";
 import { todayDateString } from "@/lib/date";
 
@@ -18,15 +18,45 @@ const readingSchema = z.object({
     .describe("What comes before/after this passage and the historical background needed to understand it"),
   personalMessage: z
     .string()
-    .describe("A reflective message on what God might be saying to the reader through this passage today"),
+    .describe("A reflective message on what God might be saying to the reader today"),
 });
 
+const koreanPassageSchema = z.object({
+  verses: z
+    .string()
+    .describe(
+      "쉬운성경 스타일의 한글 본문, 절 번호를 (1), (2)... 형식으로 붙여 절별로 줄바꿈해 적은 버전",
+    ),
+  story: z
+    .string()
+    .describe("같은 본문을 절 구분 없이, 하나로 자연스럽게 이어지는 이야기체 문단으로 적은 버전"),
+});
+
+// No reliable Bible API exists for Korean 새번역 (API.Bible's key kept rejecting requests — see
+// src/lib/bible.ts), so Claude renders the Korean text itself instead, grounded in the NLT
+// English text so it isn't inventing the passage's content from scratch.
+async function generateKoreanPassage(reference: string, englishText: string | null) {
+  const { object } = await generateObject({
+    model: MODEL,
+    schema: koreanPassageSchema,
+    system:
+      "당신은 성경 본문을 쉬운 한글로 옮기는 번역가입니다. 원문의 사건과 의미를 정확히 지키되, " +
+      "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
+      "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요.",
+    prompt: [
+      `본문: ${reference}`,
+      englishText ? `영어 NLT 원문:\n${englishText}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  });
+  return object;
+}
+
 async function fetchPassageTexts(passageRef: string) {
-  const [ko, en] = await Promise.all([
-    fetchKoreanPassage(passageRef).catch(() => null),
-    fetchNltPassage(passageRef).catch(() => null),
-  ]);
-  return { ko, en };
+  const en = await fetchNltPassage(passageRef).catch(() => null);
+  const ko = await generateKoreanPassage(passageRef, en).catch(() => null);
+  return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en };
 }
 
 // Generates (or returns the already-generated) reading for a profile's current cursor position,
@@ -53,7 +83,7 @@ export async function generateDailyReading(profile: Profile) {
     .limit(1);
   if (!item) throw new Error(`No curriculum item at order_index ${position}`);
 
-  const { ko, en } = await fetchPassageTexts(item.passageRef);
+  const { koVerses, koStory, en } = await fetchPassageTexts(item.passageRef);
 
   const { object } = await generateObject({
     model: MODEL,
@@ -64,7 +94,7 @@ export async function generateDailyReading(profile: Profile) {
       "(the whole thing should read aloud in roughly 5 minutes).",
     prompt: [
       `Today's passage: ${item.passageRef} (theme bucket: ${item.theme})`,
-      ko ? `한글 새번역 본문:\n${ko}` : null,
+      koStory ? `한글 본문(이야기체):\n${koStory}` : null,
       en ? `English NLT text:\n${en}` : null,
     ]
       .filter(Boolean)
@@ -86,7 +116,8 @@ export async function generateDailyReading(profile: Profile) {
       storySummary: object.storySummary,
       historicalContext: object.historicalContext,
       personalMessage: object.personalMessage,
-      passageTextKo: ko,
+      passageTextKoVerses: koVerses,
+      passageTextKoStory: koStory,
       passageTextEn: en,
       worshipLinks,
       sermonLinks: sermonLinks.map((s) => ({ title: s.title, channel: s.channelTitle, url: s.url })),

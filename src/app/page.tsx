@@ -12,7 +12,8 @@ type Reading = {
   storySummary: string;
   historicalContext: string;
   personalMessage: string;
-  passageTextKo: string | null;
+  passageTextKoVerses: string | null;
+  passageTextKoStory: string | null;
   passageTextEn: string | null;
   worshipLinks: WorshipLink[];
   sermonLinks: SermonLink[];
@@ -34,6 +35,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [passageView, setPassageView] = useState<"verses" | "story">("story");
 
   useEffect(() => {
     // localStorage only exists client-side, so this can't be a lazy useState initializer
@@ -125,6 +127,38 @@ export default function Home() {
               {speaking ? "…" : "🔊"}
             </button>
           </div>
+
+          {(reading.passageTextKoVerses || reading.passageTextKoStory) && (
+            <Section title="오늘의 본문">
+              <div className="mb-2 flex gap-1.5">
+                <button
+                  onClick={() => setPassageView("story")}
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    passageView === "story"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                  }`}
+                >
+                  이야기로
+                </button>
+                <button
+                  onClick={() => setPassageView("verses")}
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    passageView === "verses"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                  }`}
+                >
+                  절별로
+                </button>
+              </div>
+              <p className="text-sm leading-relaxed whitespace-pre-line">
+                {(passageView === "story" ? reading.passageTextKoStory : reading.passageTextKoVerses) ??
+                  reading.passageTextKoStory ??
+                  reading.passageTextKoVerses}
+              </p>
+            </Section>
+          )}
 
           <Section title="오늘의 이야기">
             <p className="text-sm leading-relaxed whitespace-pre-line">{reading.storySummary}</p>

@@ -66,8 +66,9 @@
 본문/찬양/설교 링크만 비어있는 채로 진행됨):
 
 1. **NLT API** — https://api.nlt.to 에서 키 발급 (비상업적 무료) → `NLT_API_KEY`
-2. **API.Bible** — https://api.bible 가입 → Starter 플랜(무료) → `/bibles` 목록에서 **새번역(RNKSV)이 있는지 확인**. 없으면 개역개정으로 대체하고 `src/lib/bible.ts` 주석대로 passage ID 포맷 확인 필요 → `BIBLE_API_KEY`, `BIBLE_API_KO_BIBLE_ID`
-3. **YouTube Data API v3** — Google Cloud Console에서 프로젝트 만들고 API 키 발급 (검색 quota 확인) → `YOUTUBE_API_KEY`
-4. **CRON_SECRET / APP_API_KEY** — 아무 랜덤 문자열이나 만들어서 Vercel 환경변수에 등록 (배포 후 `/api/cron/generate-daily`, `/api/transcribe` 보호용)
+   (한글 본문은 별도 API 없이 Claude가 이 NLT 영어 본문을 근거로 직접 생성해요 — 절별 버전과
+   이야기체 버전 둘 다. API.Bible 키는 가입 후에도 계속 "Invalid API key"로 막혀서 포기했어요.)
+2. **YouTube Data API v3** — Google Cloud Console에서 프로젝트 만들고 API 키 발급 (검색 quota 확인) → `YOUTUBE_API_KEY`
+3. **CRON_SECRET / APP_API_KEY** — 아무 랜덤 문자열이나 만들어서 Vercel 환경변수에 등록 (배포 후 `/api/cron/generate-daily`, `/api/transcribe` 보호용)
 
 키를 하나씩 채워가며 `vercel env add <NAME>` → `vercel env pull`로 로컬에 반영하면 점진적으로 붙일 수 있어요.
