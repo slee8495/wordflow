@@ -1,0 +1,74 @@
+import {
+  pgTable,
+  serial,
+  text,
+  varchar,
+  timestamp,
+  jsonb,
+  integer,
+  date,
+  pgEnum,
+  unique,
+} from "drizzle-orm/pg-core";
+
+export const testamentEnum = pgEnum("testament", ["old", "new"]);
+
+// The ordered, theme-curated sequence of passages that every profile's cursor walks through.
+// Not book order — grouped by theme/season so day-to-day reading has narrative continuity.
+// Loops back to orderIndex 0 once a profile's cursor passes the last row.
+export const curriculumItems = pgTable("curriculum_items", {
+  id: serial("id").primaryKey(),
+  orderIndex: integer("order_index").notNull().unique(),
+  theme: varchar("theme", { length: 128 }).notNull(),
+  book: varchar("book", { length: 64 }).notNull(),
+  passageRef: varchar("passage_ref", { length: 128 }).notNull(),
+  testament: testamentEnum("testament").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type WorshipLink = { title: string; url: string };
+export type SermonLink = { title: string; channel: string; url: string };
+
+// A lightweight name-based profile — no password/auth yet. `name` is the login.
+export const profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 64 }).notNull().unique(),
+  cursorPosition: integer("cursor_position").default(0).notNull(),
+  lastReadDate: date("last_read_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// One generated day's content per profile. Regenerated fresh by the nightly cron even if the
+// underlying passage repeats on a later loop through the curriculum, so the commentary/message
+// isn't just replayed verbatim each cycle.
+export const readings = pgTable(
+  "readings",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    curriculumItemId: integer("curriculum_item_id")
+      .notNull()
+      .references(() => curriculumItems.id),
+    forDate: date("for_date").notNull(),
+
+    theme: varchar("theme", { length: 128 }).notNull(),
+    storySummary: text("story_summary").notNull(),
+    historicalContext: text("historical_context").notNull(),
+    personalMessage: text("personal_message").notNull(),
+
+    passageTextKo: text("passage_text_ko"),
+    passageTextEn: text("passage_text_en"),
+
+    worshipLinks: jsonb("worship_links").$type<WorshipLink[]>().default([]),
+    sermonLinks: jsonb("sermon_links").$type<SermonLink[]>().default([]),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [unique().on(t.profileId, t.forDate)],
+);
+
+export type Profile = typeof profiles.$inferSelect;
+export type CurriculumItem = typeof curriculumItems.$inferSelect;
+export type Reading = typeof readings.$inferSelect;
