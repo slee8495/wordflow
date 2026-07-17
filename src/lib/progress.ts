@@ -31,8 +31,7 @@ export type ProgressPayload = {
   currentBookProgressPct: number | null; // chaptersTouched / totalChapters * 100, for currentBook
   projectedCompletionDate: string | null; // YYYY-MM-DD, Pacific
   perBookProgress: { book: string; testament: "old" | "new"; chaptersTouched: number; totalChapters: number; pct: number }[];
-  recentActivityCount: number;
-  recentActivityDays: number;
+  activityCount: number; // readings + deep-reading-log rows, scoped the same as everything else
 };
 
 function daysAgoDateString(days: number): string {
@@ -77,7 +76,7 @@ async function getTouchedChapters(profileId: number, since?: Date): Promise<Map<
   return touched;
 }
 
-export async function getReadingProgress(profile: Profile, days: number, scope: ProgressScope): Promise<ProgressPayload> {
+export async function getReadingProgress(profile: Profile, scope: ProgressScope): Promise<ProgressPayload> {
   const [{ count: curriculumLength }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(curriculumItems);
@@ -122,9 +121,9 @@ export async function getReadingProgress(profile: Profile, days: number, scope: 
     };
   });
 
-  // Trailing pace for the completion projection — a fixed window, independent of the UI's
-  // requested `days` filter (which only affects recentActivityCount below). Stays curriculum-
-  // entry-based: it's projecting when the CURRICULUM LOOP finishes, not Bible chapter coverage.
+  // Trailing pace for the completion projection — always a fixed 14-day window regardless of
+  // `scope`. Stays curriculum-entry-based: it's projecting when the CURRICULUM LOOP finishes,
+  // not Bible chapter coverage.
   const paceSince = daysAgoDateString(TRAILING_PACE_DAYS);
   const [readingPace] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -139,15 +138,20 @@ export async function getReadingProgress(profile: Profile, days: number, scope: 
   const remaining = curriculumLength - profile.cursorPosition;
   const projectedCompletionDate = pace > 0 ? pacificDateString(Math.ceil(remaining / pace)) : null;
 
-  const sinceDate = daysAgoDateString(days);
-  const [readingRecent] = await db
+  // Same scope as everything else on this payload — "this cycle" or lifetime, no separate
+  // day-range picker.
+  const [readingActivity] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(readings)
-    .where(and(eq(readings.profileId, profile.id), gte(readings.forDate, sinceDate)));
-  const [deepRecent] = await db
+    .where(since ? and(eq(readings.profileId, profile.id), gte(readings.createdAt, since)) : eq(readings.profileId, profile.id));
+  const [deepActivity] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(deepReadingLogs)
-    .where(and(eq(deepReadingLogs.profileId, profile.id), gte(deepReadingLogs.forDate, sinceDate)));
+    .where(
+      since
+        ? and(eq(deepReadingLogs.profileId, profile.id), gte(deepReadingLogs.createdAt, since))
+        : eq(deepReadingLogs.profileId, profile.id),
+    );
 
   return {
     scope,
@@ -161,7 +165,6 @@ export async function getReadingProgress(profile: Profile, days: number, scope: 
     currentBookProgressPct,
     projectedCompletionDate,
     perBookProgress,
-    recentActivityCount: (readingRecent?.count ?? 0) + (deepRecent?.count ?? 0),
-    recentActivityDays: days,
+    activityCount: (readingActivity?.count ?? 0) + (deepActivity?.count ?? 0),
   };
 }
