@@ -36,6 +36,10 @@ export const profiles = pgTable("profiles", {
   // Increments each time cursorPosition wraps past the end of curriculum_items — how many full
   // read-through cycles this profile has completed.
   cycleCount: integer("cycle_count").default(0).notNull(),
+  // Set on the very first reading ever, and reset every time cycleCount increments — lets the
+  // progress dashboard scope "books touched" / per-book progress to just the current cycle
+  // instead of only offering lifetime-cumulative numbers.
+  currentCycleStartedAt: timestamp("current_cycle_started_at", { withTimezone: true }),
   lastReadDate: date("last_read_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

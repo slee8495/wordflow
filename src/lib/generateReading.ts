@@ -142,12 +142,17 @@ async function buildReading(profile: Profile, forDate: string) {
   const result = await buildReadingForItem(profile, forDate, item);
 
   const nextPosition = (position + 1) % curriculumLength;
+  // Wrapping back to 0 means this reading completed a full pass through the curriculum — start
+  // a new cycle. The very first reading ever also starts a cycle (cycle 1), since
+  // currentCycleStartedAt is otherwise still null at that point.
+  const cycleJustCompleted = nextPosition === 0;
+  const isFirstReadingEver = profile.lastReadDate === null;
   await db
     .update(profiles)
     .set({
       cursorPosition: nextPosition,
-      // Wrapping back to 0 means this reading completed a full pass through the curriculum.
-      ...(nextPosition === 0 ? { cycleCount: profile.cycleCount + 1 } : {}),
+      ...(cycleJustCompleted ? { cycleCount: profile.cycleCount + 1 } : {}),
+      ...(cycleJustCompleted || isFirstReadingEver ? { currentCycleStartedAt: new Date() } : {}),
       lastReadDate: forDate,
     })
     .where(eq(profiles.id, profile.id));

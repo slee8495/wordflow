@@ -13,7 +13,11 @@ const LANG_KEY = "wordflow:lang";
 const METER_FILL = "bg-[#2a78d6] dark:bg-[#3987e5]";
 const METER_TRACK = "bg-[#cde2fb] dark:bg-zinc-800";
 
+type ProgressScope = "cycle" | "all";
+
 type ProgressPayload = {
+  scope: ProgressScope;
+  cycleStartedAt: string | null;
   cycleCount: number;
   booksTouchedCount: number;
   booksProgressPct: number;
@@ -83,8 +87,14 @@ const DAY_FILTERS: { label: string; days: number }[] = [
   { label: "All", days: 3650 },
 ];
 
+const SCOPE_OPTIONS: { label: string; scope: ProgressScope }[] = [
+  { label: "This cycle", scope: "cycle" },
+  { label: "All time", scope: "all" },
+];
+
 function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) {
   const [days, setDays] = useState(30);
+  const [scope, setScope] = useState<ProgressScope>("cycle");
   const [progress, setProgress] = useState<ProgressPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +103,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetch(`/api/reading/progress?name=${encodeURIComponent(name)}&days=${days}`)
+    fetch(`/api/reading/progress?name=${encodeURIComponent(name)}&days=${days}&scope=${scope}`)
       .then((res) => {
         if (!res.ok) throw new Error("failed to load progress");
         return res.json();
@@ -101,7 +111,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
       .then(({ progress }) => setProgress(progress))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-  }, [name, days]);
+  }, [name, days, scope]);
 
   if (loading && !progress) return <p className="text-sm text-zinc-400">Loading progress…</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -118,6 +128,25 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
           label="Projected completion"
           value={progress.projectedCompletionDate ?? "Not enough data yet"}
         />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-zinc-400">Books touched & per-book progress, scoped to:</span>
+        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 text-xs dark:bg-zinc-800">
+          {SCOPE_OPTIONS.map((s) => (
+            <button
+              key={s.scope}
+              onClick={() => setScope(s.scope)}
+              className={`rounded-full px-2 py-1 ${
+                scope === s.scope
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
+                  : "text-zinc-500"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {started ? (

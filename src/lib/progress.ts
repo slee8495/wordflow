@@ -17,7 +17,11 @@ import { parsePassageRef } from "@/lib/passageRef";
 
 const TRAILING_PACE_DAYS = 14;
 
+export type ProgressScope = "cycle" | "all";
+
 export type ProgressPayload = {
+  scope: ProgressScope;
+  cycleStartedAt: string | null; // ISO timestamp, null if scope is "all" or no cycle started yet
   cycleCount: number;
   booksTouchedCount: number;
   booksProgressPct: number; // booksTouchedCount / 66 * 100
@@ -37,15 +41,16 @@ function daysAgoDateString(days: number): string {
 
 // Every chapter a profile has touched, per book — from daily readings (whose curriculum
 // passageRef may span several chapters, e.g. "Genesis 6:5-7:16" touches both 6 and 7) and from
-// the deep-reading tab's explicit per-chapter log.
-async function getTouchedChapters(profileId: number): Promise<Map<string, Set<number>>> {
+// the deep-reading tab's explicit per-chapter log. `since`, when given, scopes this to activity
+// recorded after that timestamp (used for the "this cycle" view — omit for lifetime-cumulative).
+async function getTouchedChapters(profileId: number, since?: Date): Promise<Map<string, Set<number>>> {
   const touched = new Map<string, Set<number>>();
 
   const readingRows = await db
     .select({ passageRef: curriculumItems.passageRef })
     .from(readings)
     .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
-    .where(eq(readings.profileId, profileId));
+    .where(since ? and(eq(readings.profileId, profileId), gte(readings.createdAt, since)) : eq(readings.profileId, profileId));
 
   for (const r of readingRows) {
     const p = parsePassageRef(r.passageRef);
@@ -57,7 +62,11 @@ async function getTouchedChapters(profileId: number): Promise<Map<string, Set<nu
   const deepRows = await db
     .select({ book: deepReadingLogs.book, chapter: deepReadingLogs.chapter })
     .from(deepReadingLogs)
-    .where(eq(deepReadingLogs.profileId, profileId));
+    .where(
+      since
+        ? and(eq(deepReadingLogs.profileId, profileId), gte(deepReadingLogs.createdAt, since))
+        : eq(deepReadingLogs.profileId, profileId),
+    );
 
   for (const r of deepRows) {
     const set = touched.get(r.book) ?? new Set<number>();
@@ -68,12 +77,13 @@ async function getTouchedChapters(profileId: number): Promise<Map<string, Set<nu
   return touched;
 }
 
-export async function getReadingProgress(profile: Profile, days: number): Promise<ProgressPayload> {
+export async function getReadingProgress(profile: Profile, days: number, scope: ProgressScope): Promise<ProgressPayload> {
   const [{ count: curriculumLength }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(curriculumItems);
 
-  const touchedChapters = await getTouchedChapters(profile.id);
+  const since = scope === "cycle" ? (profile.currentCycleStartedAt ?? undefined) : undefined;
+  const touchedChapters = await getTouchedChapters(profile.id, since);
   const booksTouchedCount = touchedChapters.size;
   const booksProgressPct = (booksTouchedCount / BIBLE_BOOKS.length) * 100;
 
@@ -140,6 +150,8 @@ export async function getReadingProgress(profile: Profile, days: number): Promis
     .where(and(eq(deepReadingLogs.profileId, profile.id), gte(deepReadingLogs.forDate, sinceDate)));
 
   return {
+    scope,
+    cycleStartedAt: scope === "cycle" ? (profile.currentCycleStartedAt?.toISOString() ?? null) : null,
     cycleCount: profile.cycleCount,
     booksTouchedCount,
     booksProgressPct,

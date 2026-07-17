@@ -8,10 +8,12 @@ export async function GET(req: NextRequest) {
 
   const daysParam = Number(req.nextUrl.searchParams.get("days"));
   const days = Number.isFinite(daysParam) && daysParam > 0 ? daysParam : 30;
+  const scopeParam = req.nextUrl.searchParams.get("scope");
+  const scope = scopeParam === "all" ? "all" : "cycle";
 
   try {
     const profile = await findOrCreateProfile(name);
-    const progress = await getReadingProgress(profile, days);
+    const progress = await getReadingProgress(profile, days, scope);
     return NextResponse.json({ progress });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
