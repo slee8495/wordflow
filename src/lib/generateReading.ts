@@ -141,9 +141,15 @@ async function buildReading(profile: Profile, forDate: string) {
 
   const result = await buildReadingForItem(profile, forDate, item);
 
+  const nextPosition = (position + 1) % curriculumLength;
   await db
     .update(profiles)
-    .set({ cursorPosition: (position + 1) % curriculumLength, lastReadDate: forDate })
+    .set({
+      cursorPosition: nextPosition,
+      // Wrapping back to 0 means this reading completed a full pass through the curriculum.
+      ...(nextPosition === 0 ? { cycleCount: profile.cycleCount + 1 } : {}),
+      lastReadDate: forDate,
+    })
     .where(eq(profiles.id, profile.id));
 
   return result;
