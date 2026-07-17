@@ -8,11 +8,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-[var(--ink)]">설정</h1>
+      <h1 className="text-xl font-semibold text-[var(--ink)]">Settings</h1>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
-        <h2 className="text-sm font-semibold text-[var(--ink-soft)]">글자 크기</h2>
-        <div className="grid grid-cols-4 gap-2">
+        <h2 className="text-sm font-semibold text-[var(--ink-soft)]">Font Size</h2>
+        <div className="grid grid-cols-3 gap-2">
           {FONT_SCALES.map((option) => (
             <button
               key={option.value}
@@ -25,12 +25,12 @@ export default function SettingsPage() {
                   : "border-[var(--line)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
               }`}
             >
-              <span style={{ fontSize: `${option.value}rem` }}>가</span>
+              <span style={{ fontSize: `${option.value}rem` }}>Aa</span>
               <span className="text-xs">{option.label}</span>
             </button>
           ))}
         </div>
-        <p className="text-sm text-[var(--ink-soft)]">앱 전체 글자 크기가 바로 반영돼요.</p>
+        <p className="text-sm text-[var(--ink-soft)]">Applies across the whole app instantly.</p>
       </section>
     </div>
   );

@@ -68,8 +68,8 @@ export default function RootLayout({
                 <AppNav />
                 <Link
                   href="/settings"
-                  aria-label="설정"
-                  title="설정"
+                  aria-label="Settings"
+                  title="Settings"
                   className="rounded-full p-2 text-lg text-[var(--ink-soft)] transition-colors hover:bg-[var(--clay-tint)] hover:text-[var(--ink)]"
                 >
                   ⚙️
