@@ -14,8 +14,14 @@ import {
 export const testamentEnum = pgEnum("testament", ["old", "new"]);
 
 // The ordered, theme-curated sequence of passages that every profile's cursor walks through.
-// Not book order — grouped by theme/season so day-to-day reading has narrative continuity.
-// Loops back to orderIndex 0 once a profile's cursor passes the last row.
+// Not book order — grouped by theme so day-to-day reading has narrative continuity. Loops back
+// to orderIndex 0 once a profile's cursor passes the last row.
+//
+// Season entries (season + seasonDayIndex set) live in this same table but are NOT part of that
+// rotation — they use a separate orderIndex range (1000+, see seasonCurriculumData.ts) and every
+// query that computes the normal cursor's curriculumLength or orderIndex range must filter
+// `season IS NULL`, or a season row sharing a book name with a normal entry (e.g. both "Luke")
+// would corrupt the per-book progress math. See src/lib/season.ts for the day-of-year lookup.
 export const curriculumItems = pgTable("curriculum_items", {
   id: serial("id").primaryKey(),
   orderIndex: integer("order_index").notNull().unique(),
@@ -23,6 +29,8 @@ export const curriculumItems = pgTable("curriculum_items", {
   book: varchar("book", { length: 64 }).notNull(),
   passageRef: varchar("passage_ref", { length: 128 }).notNull(),
   testament: testamentEnum("testament").notNull(),
+  season: varchar("season", { length: 32 }), // "holy_week" | "christmas" | "thanksgiving" | null
+  seasonDayIndex: integer("season_day_index"), // 0-indexed day within that season, null if season is null
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

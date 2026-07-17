@@ -1,12 +1,13 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings, type CurriculumItem, type Profile } from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs } from "@/lib/youtube";
-import { todayDateString } from "@/lib/date";
+import { todayDateString, pacificDateString } from "@/lib/date";
+import { getActiveSeason } from "@/lib/season";
 
 const bilingualField = (description: string) =>
   z.object({
@@ -127,7 +128,12 @@ async function buildReadingForItem(
 // "read next" action. forDate is which calendar date the row is stamped with; readings are no
 // longer unique per (profile, date), so a profile can have several from the same day.
 async function buildReading(profile: Profile, forDate: string) {
-  const [total] = await db.select({ count: sql<number>`count(*)` }).from(curriculumItems);
+  // season IS NULL: season entries share this table (see schema.ts) but use a disjoint
+  // orderIndex range and must never be counted into the normal rotation's length/position math.
+  const [total] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(curriculumItems)
+    .where(isNull(curriculumItems.season));
   const curriculumLength = Number(total?.count ?? 0);
   if (curriculumLength === 0) throw new Error("curriculum_items is empty — seed it first");
 
@@ -135,7 +141,7 @@ async function buildReading(profile: Profile, forDate: string) {
   const [item] = await db
     .select()
     .from(curriculumItems)
-    .where(eq(curriculumItems.orderIndex, position))
+    .where(and(eq(curriculumItems.orderIndex, position), isNull(curriculumItems.season)))
     .limit(1);
   if (!item) throw new Error(`No curriculum item at order_index ${position}`);
 
@@ -158,6 +164,31 @@ async function buildReading(profile: Profile, forDate: string) {
     .where(eq(profiles.id, profile.id));
 
   return result;
+}
+
+// The FIRST reading of a calendar day (idempotent GET path only, never "read next"): if today
+// falls in an active season window (Holy Week / Christmas / Thanksgiving — see src/lib/season.ts),
+// serves that season's reading instead of the normal rotation, without touching the cursor at
+// all. Because the cursor is untouched, any *subsequent* reading that day (via "read next", which
+// always calls buildReading directly, bypassing this function) falls straight back to normal
+// progress — that's the "regenerating during a season always catches up" behavior — and the
+// cursor resumes exactly where it was once the season window closes.
+async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
+  const activeSeason = getActiveSeason(pacificDateString());
+  if (activeSeason) {
+    const [seasonItem] = await db
+      .select()
+      .from(curriculumItems)
+      .where(
+        and(
+          eq(curriculumItems.season, activeSeason.season),
+          eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
+        ),
+      )
+      .limit(1);
+    if (seasonItem) return buildReadingForItem(profile, forDate, seasonItem);
+  }
+  return buildReading(profile, forDate);
 }
 
 // Repair helper: generates a reading for a specific curriculum orderIndex without touching the
@@ -191,7 +222,7 @@ export async function generateDailyReading(profile: Profile) {
     return { ...existing, passageRef: existingItem?.passageRef ?? null };
   }
 
-  return buildReading(profile, forDate);
+  return buildFirstReadingOfDay(profile, forDate);
 }
 
 // User-triggered "read next" action: always generates a new reading for today and advances the
@@ -213,7 +244,7 @@ export async function getTodayReadings(profile: Profile) {
     .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
     .orderBy(readings.createdAt);
 
-  const rows = existing.length > 0 ? existing : [await buildReading(profile, forDate)];
+  const rows = existing.length > 0 ? existing : [await buildFirstReadingOfDay(profile, forDate)];
 
   return Promise.all(
     rows.map(async (r) => {

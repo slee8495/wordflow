@@ -8,7 +8,7 @@
 // unit didn't match what a reader intuitively expects "% of Genesis" to mean. cycleCount and
 // the completion projection stay curriculum-entry-based, since those are specifically about
 // finishing the curriculum loop, a different (and still well-defined) concept.
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, deepReadingLogs, readings, type Profile } from "@/db/schema";
 import { BIBLE_BOOKS, chapterCountForBook } from "@/lib/bibleBooks";
@@ -42,6 +42,9 @@ function daysAgoDateString(days: number): string {
 // passageRef may span several chapters, e.g. "Genesis 6:5-7:16" touches both 6 and 7) and from
 // the deep-reading tab's explicit per-chapter log. `since`, when given, scopes this to activity
 // recorded after that timestamp (used for the "this cycle" view — omit for lifetime-cumulative).
+// Deliberately includes season readings (Holy Week/Christmas/Thanksgiving) here — if you read
+// Palm Sunday's Matthew 21 passage, that's a real chapter read and should count, even though
+// season readings don't advance cursorPosition or count toward curriculumLength below.
 async function getTouchedChapters(profileId: number, since?: Date): Promise<Map<string, Set<number>>> {
   const touched = new Map<string, Set<number>>();
 
@@ -77,9 +80,12 @@ async function getTouchedChapters(profileId: number, since?: Date): Promise<Map<
 }
 
 export async function getReadingProgress(profile: Profile, scope: ProgressScope): Promise<ProgressPayload> {
+  // season IS NULL: exclude Holy Week/Christmas/Thanksgiving entries from the normal cursor's
+  // length/position math — see the comment on curriculumItems in schema.ts.
   const [{ count: curriculumLength }] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(curriculumItems);
+    .from(curriculumItems)
+    .where(isNull(curriculumItems.season));
 
   const since = scope === "cycle" ? (profile.currentCycleStartedAt ?? undefined) : undefined;
   const touchedChapters = await getTouchedChapters(profile.id, since);
@@ -98,7 +104,7 @@ export async function getReadingProgress(profile: Profile, scope: ProgressScope)
     const [item] = await db
       .select()
       .from(curriculumItems)
-      .where(eq(curriculumItems.orderIndex, justReadIndex))
+      .where(and(eq(curriculumItems.orderIndex, justReadIndex), isNull(curriculumItems.season)))
       .limit(1);
     if (item) {
       currentBook = item.book;

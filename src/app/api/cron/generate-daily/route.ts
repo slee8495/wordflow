@@ -6,9 +6,10 @@ import { generateDailyReading } from "@/lib/generateReading";
 
 export const maxDuration = 300;
 
-// Nightly batch: generates today's reading (and advances the cursor) for every profile that
-// doesn't already have one for today. Safe to call more than once a day — generateDailyReading
-// is idempotent per (profile, date).
+// Nightly batch: generates today's reading for every profile that doesn't already have one for
+// today (advancing the cursor, unless today falls in an active season — see src/lib/season.ts —
+// in which case the season reading is served instead and the cursor is left untouched). Safe to
+// call more than once a day — generateDailyReading is idempotent per (profile, date).
 export async function GET(req: NextRequest) {
   const unauthorized = requireCronAuth(req);
   if (unauthorized) return unauthorized;
