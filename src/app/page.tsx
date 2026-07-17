@@ -71,6 +71,7 @@ export default function Home() {
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [speakingSection, setSpeakingSection] = useState<string | null>(null);
+  const [generatingNext, setGeneratingNext] = useState(false);
 
   useEffect(() => {
     // localStorage only exists client-side, so this can't be a lazy useState initializer
@@ -108,6 +109,27 @@ export default function Home() {
     setSpeakingSection(id);
     await speak(text);
     setSpeakingSection((current) => (current === id ? null : current));
+  }
+
+  async function readNext() {
+    if (!name || generatingNext) return;
+    setGeneratingNext(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/today/next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("failed to generate the next reading");
+      const { reading } = await res.json();
+      setReading(reading);
+      setPassageView("verses");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeneratingNext(false);
+    }
   }
 
   const todayLabel = new Intl.DateTimeFormat("en-US", {
@@ -304,6 +326,14 @@ export default function Home() {
               </ul>
             </Section>
           )}
+
+          <button
+            onClick={readNext}
+            disabled={generatingNext}
+            className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-zinc-600 dark:hover:text-zinc-300"
+          >
+            {generatingNext ? "Generating…" : "Done for today — read the next passage →"}
+          </button>
         </>
       )}
     </div>

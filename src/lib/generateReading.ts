@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings, type Profile } from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
@@ -63,25 +63,11 @@ async function fetchPassageTexts(passageRef: string) {
   return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en };
 }
 
-// Generates (or returns the already-generated) reading for a profile's current cursor position,
-// for today's date. Idempotent per (profile, day) — safe to call repeatedly from /api/today.
-export async function generateDailyReading(profile: Profile) {
-  const forDate = todayDateString();
-
-  const [existing] = await db
-    .select()
-    .from(readings)
-    .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
-    .limit(1);
-  if (existing) {
-    const [existingItem] = await db
-      .select()
-      .from(curriculumItems)
-      .where(eq(curriculumItems.id, existing.curriculumItemId))
-      .limit(1);
-    return { ...existing, passageRef: existingItem?.passageRef ?? null };
-  }
-
+// Always generates a fresh reading at the profile's current cursor position and advances the
+// cursor — the building block for both the idempotent daily path and the user-triggered
+// "read next" action. forDate is which calendar date the row is stamped with; readings are no
+// longer unique per (profile, date), so a profile can have several from the same day.
+async function buildReading(profile: Profile, forDate: string) {
   const [total] = await db.select({ count: sql<number>`count(*)` }).from(curriculumItems);
   const curriculumLength = Number(total?.count ?? 0);
   if (curriculumLength === 0) throw new Error("curriculum_items is empty — seed it first");
@@ -149,6 +135,37 @@ export async function generateDailyReading(profile: Profile) {
     .where(eq(profiles.id, profile.id));
 
   return { ...row, passageRef: item.passageRef };
+}
+
+// Returns today's most recent reading if one already exists, otherwise generates the first one
+// for today. Idempotent for repeat calls with nothing new to do — safe for the nightly cron and
+// for /api/today to call on every page load without spamming generations.
+export async function generateDailyReading(profile: Profile) {
+  const forDate = todayDateString();
+
+  const [existing] = await db
+    .select()
+    .from(readings)
+    .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
+    .orderBy(desc(readings.createdAt))
+    .limit(1);
+  if (existing) {
+    const [existingItem] = await db
+      .select()
+      .from(curriculumItems)
+      .where(eq(curriculumItems.id, existing.curriculumItemId))
+      .limit(1);
+    return { ...existing, passageRef: existingItem?.passageRef ?? null };
+  }
+
+  return buildReading(profile, forDate);
+}
+
+// User-triggered "read next" action: always generates a new reading for today and advances the
+// cursor, regardless of whether one already exists for today. Lets someone who finishes today's
+// reading keep going instead of waiting for tomorrow's cron.
+export async function generateNextReading(profile: Profile) {
+  return buildReading(profile, todayDateString());
 }
 
 export async function findOrCreateProfile(name: string): Promise<Profile> {

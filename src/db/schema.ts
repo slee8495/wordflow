@@ -8,7 +8,6 @@ import {
   integer,
   date,
   pgEnum,
-  unique,
 } from "drizzle-orm/pg-core";
 
 export const testamentEnum = pgEnum("testament", ["old", "new"]);
@@ -38,46 +37,44 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// One generated day's content per profile. Regenerated fresh by the nightly cron even if the
-// underlying passage repeats on a later loop through the curriculum, so the commentary/message
-// isn't just replayed verbatim each cycle.
-export const readings = pgTable(
-  "readings",
-  {
-    id: serial("id").primaryKey(),
-    profileId: integer("profile_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
-    curriculumItemId: integer("curriculum_item_id")
-      .notNull()
-      .references(() => curriculumItems.id),
-    forDate: date("for_date").notNull(),
+// One generated reading per profile per generation. Regenerated fresh by the nightly cron even
+// if the underlying passage repeats on a later loop through the curriculum, so the commentary/
+// message isn't just replayed verbatim each cycle. No longer unique per (profileId, forDate) —
+// a profile can request more than one reading on the same calendar day via the "read next"
+// button, which always advances the cursor; /api/today shows the most recent one for today.
+export const readings = pgTable("readings", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  curriculumItemId: integer("curriculum_item_id")
+    .notNull()
+    .references(() => curriculumItems.id),
+  forDate: date("for_date").notNull(),
 
-    theme: varchar("theme", { length: 128 }).notNull(),
-    storySummary: text("story_summary").notNull(),
-    historicalContext: text("historical_context").notNull(),
-    personalMessage: text("personal_message").notNull(),
+  theme: varchar("theme", { length: 128 }).notNull(),
+  storySummary: text("story_summary").notNull(),
+  historicalContext: text("historical_context").notNull(),
+  personalMessage: text("personal_message").notNull(),
 
-    // English counterparts of the four fields above, written in the same generateObject
-    // call — lets the UI offer a content-language toggle independent of the passage text.
-    themeEn: varchar("theme_en", { length: 128 }),
-    storySummaryEn: text("story_summary_en"),
-    historicalContextEn: text("historical_context_en"),
-    personalMessageEn: text("personal_message_en"),
+  // English counterparts of the four fields above, written in the same generateObject
+  // call — lets the UI offer a content-language toggle independent of the passage text.
+  themeEn: varchar("theme_en", { length: 128 }),
+  storySummaryEn: text("story_summary_en"),
+  historicalContextEn: text("historical_context_en"),
+  personalMessageEn: text("personal_message_en"),
 
-    // Claude-rendered Korean text (no reliable Bible API for 새번역 — see src/lib/bible.ts),
-    // kept in both a verse-numbered form and a continuous-story form so the UI can offer either.
-    passageTextKoVerses: text("passage_text_ko_verses"),
-    passageTextKoStory: text("passage_text_ko_story"),
-    passageTextEn: text("passage_text_en"),
+  // Claude-rendered Korean text (no reliable Bible API for 새번역 — see src/lib/bible.ts),
+  // kept in both a verse-numbered form and a continuous-story form so the UI can offer either.
+  passageTextKoVerses: text("passage_text_ko_verses"),
+  passageTextKoStory: text("passage_text_ko_story"),
+  passageTextEn: text("passage_text_en"),
 
-    worshipLinks: jsonb("worship_links").$type<WorshipLink[]>().default([]),
-    sermonLinks: jsonb("sermon_links").$type<SermonLink[]>().default([]),
+  worshipLinks: jsonb("worship_links").$type<WorshipLink[]>().default([]),
+  sermonLinks: jsonb("sermon_links").$type<SermonLink[]>().default([]),
 
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (t) => [unique().on(t.profileId, t.forDate)],
-);
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
