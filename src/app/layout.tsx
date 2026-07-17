@@ -28,7 +28,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#1e1b4b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf3e6" },
+    { media: "(prefers-color-scheme: dark)", color: "#221a14" },
+  ],
 };
 
 export default function RootLayout({
@@ -41,13 +44,13 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-100">
+      <body className="min-h-full flex flex-col bg-[var(--paper)] text-[var(--ink)]">
         <header
-          className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur dark:border-zinc-800 dark:bg-black/90"
+          className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
           <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
-            <span className="text-lg font-semibold tracking-tight">📖 Wordflow</span>
+            <span className="text-lg font-semibold tracking-tight text-[var(--clay-deep)]">📖 Wordflow</span>
             <AppNav />
           </div>
         </header>

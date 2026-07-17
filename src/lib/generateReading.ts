@@ -145,20 +145,27 @@ async function buildReading(profile: Profile, forDate: string) {
     .limit(1);
   if (!item) throw new Error(`No curriculum item at order_index ${position}`);
 
-  const result = await buildReadingForItem(profile, forDate, item);
-
   const nextPosition = (position + 1) % curriculumLength;
   // Wrapping back to 0 means this reading completed a full pass through the curriculum — start
   // a new cycle. The very first reading ever also starts a cycle (cycle 1), since
   // currentCycleStartedAt is otherwise still null at that point.
   const cycleJustCompleted = nextPosition === 0;
   const isFirstReadingEver = profile.lastReadDate === null;
+  // Captured once and reused as both this reading's createdAt and the new
+  // currentCycleStartedAt, so the reading that starts a cycle is never itself excluded from
+  // "this cycle" scope — getReadingProgress filters readings with `createdAt >=
+  // currentCycleStartedAt`, which would otherwise miss it by the few milliseconds between the
+  // insert below and a separately-timestamped update.
+  const cycleStartTimestamp = cycleJustCompleted || isFirstReadingEver ? new Date() : undefined;
+
+  const result = await buildReadingForItem(profile, forDate, item, cycleStartTimestamp);
+
   await db
     .update(profiles)
     .set({
       cursorPosition: nextPosition,
       ...(cycleJustCompleted ? { cycleCount: profile.cycleCount + 1 } : {}),
-      ...(cycleJustCompleted || isFirstReadingEver ? { currentCycleStartedAt: new Date() } : {}),
+      ...(cycleStartTimestamp ? { currentCycleStartedAt: cycleStartTimestamp } : {}),
       lastReadDate: forDate,
     })
     .where(eq(profiles.id, profile.id));

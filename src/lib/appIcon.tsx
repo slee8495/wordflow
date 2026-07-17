@@ -1,8 +1,11 @@
 export function AppIconMark({ size }: { size: number }) {
-  const barCount = 4;
-  const gap = Math.round(size * 0.06);
-  const barWidth = Math.round((size * 0.6 - gap * (barCount - 1)) / barCount);
-  const heights = [0.4, 0.7, 0.55, 0.85].map((f) => Math.round(size * 0.6 * f));
+  const pageWidth = Math.round(size * 0.29);
+  const pageHeight = Math.round(size * 0.42);
+  const outerRadius = Math.round(size * 0.11);
+  const innerRadius = Math.round(size * 0.025);
+  const spineWidth = Math.max(2, Math.round(size * 0.028));
+  const spineHeight = Math.round(size * 0.46);
+  const gap = Math.max(1, Math.round(size * 0.012));
 
   return (
     <div
@@ -12,22 +15,36 @@ export function AppIconMark({ size }: { size: number }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(135deg, #7c3aed 0%, #1e1b4b 100%)",
+        background: "linear-gradient(145deg, #d97a49 0%, #9c4726 62%, #6e3018 100%)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-end", gap, height: size * 0.6 }}>
-        {heights.map((h, i) => (
-          <div
-            key={i}
-            style={{
-              width: barWidth,
-              height: h,
-              borderRadius: barWidth / 2,
-              background: "#fbbf24",
-              opacity: 0.95,
-            }}
-          />
-        ))}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <div
+          style={{
+            width: pageWidth,
+            height: pageHeight,
+            background: "#fbf1e2",
+            borderRadius: `${outerRadius}px ${innerRadius}px ${innerRadius}px ${outerRadius}px`,
+            marginRight: gap,
+          }}
+        />
+        <div
+          style={{
+            width: spineWidth,
+            height: spineHeight,
+            background: "#5c2c14",
+            borderRadius: spineWidth / 2,
+          }}
+        />
+        <div
+          style={{
+            width: pageWidth,
+            height: pageHeight,
+            background: "#fbf1e2",
+            borderRadius: `${innerRadius}px ${outerRadius}px ${outerRadius}px ${innerRadius}px`,
+            marginLeft: gap,
+          }}
+        />
       </div>
     </div>
   );

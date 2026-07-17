@@ -8,12 +8,12 @@ import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
 const NAME_KEY = "wordflow:name";
 const LANG_KEY = "wordflow:lang";
 
-// Warm amber (the palette's validated "orange" categorical slot) instead of the default
-// sequential blue — reads more like a devotional/QT app, less like a SaaS analytics tool. One
-// hue for magnitude, constant across a bar chart where length (not lightness) carries the value.
-const METER_FILL = "bg-[#eb6834] dark:bg-[#d95926]";
-const METER_TRACK = "bg-[#eb6834]/15 dark:bg-[#d95926]/20";
-const CARD = "rounded-xl border border-amber-100 bg-[#fdf8f0] p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950";
+// Sequential magnitude color for the two headline meters (books touched, current book) — a
+// single clay hue, track uses a precomputed tint rather than alpha-over-paper (alpha blending
+// pushed the red channel forward and read as pink; a computed tint stays warm and muted).
+const METER_FILL = "bg-[var(--clay)]";
+const METER_TRACK = "bg-[var(--clay-tint)]";
+const CARD = "rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-4 shadow-sm";
 
 type ProgressScope = "cycle" | "all";
 
@@ -34,8 +34,8 @@ type ProgressPayload = {
 
 function StatTile({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-amber-100 bg-[#fdf8f0] p-3 dark:border-zinc-800 dark:bg-zinc-950">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-3">
+      <p className="text-xs text-[var(--ink-soft)]">
         {icon} {label}
       </p>
       <p className="mt-1 text-xl font-semibold">{value}</p>
@@ -47,10 +47,10 @@ function Meter({ icon, label, pct, sublabel }: { icon: string; label: string; pc
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">
+        <span className="font-medium text-[var(--ink)]">
           {icon} {label}
         </span>
-        <span className="text-zinc-400">{sublabel}</span>
+        <span className="text-[var(--ink-soft)]">{sublabel}</span>
       </div>
       <div className={`h-2 w-full overflow-hidden rounded-full ${METER_TRACK}`}>
         <div
@@ -62,6 +62,9 @@ function Meter({ icon, label, pct, sublabel }: { icon: string; label: string; pc
   );
 }
 
+// Per-book bars use gold rather than the headline meters' clay, so the two big "how am I doing
+// overall" meters stay visually distinct from the 66-row detail list below them; a fully read
+// book switches to moss green as a quiet "done" signal.
 function BookBar({
   label,
   chaptersTouched,
@@ -72,13 +75,17 @@ function BookBar({
   totalChapters: number;
 }) {
   const pct = totalChapters > 0 ? (chaptersTouched / totalChapters) * 100 : 0;
+  const done = totalChapters > 0 && chaptersTouched >= totalChapters;
   return (
     <div className="flex items-center gap-2">
-      <span className="w-10 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
-      <div className={`h-2 flex-1 overflow-hidden rounded-full ${METER_TRACK}`}>
-        <div className={`h-full rounded-full ${METER_FILL}`} style={{ width: `${Math.min(100, pct)}%` }} />
+      <span className="w-10 shrink-0 text-xs text-[var(--ink-soft)]">{label}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--gold-tint)]">
+        <div
+          className={`h-full rounded-full ${done ? "bg-[var(--good)]" : "bg-[var(--gold)]"}`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
       </div>
-      <span className="w-10 shrink-0 text-right text-xs text-zinc-400 tabular-nums">
+      <span className="w-10 shrink-0 text-right text-xs text-[var(--ink-soft)] tabular-nums">
         {chaptersTouched}/{totalChapters}
       </span>
     </div>
@@ -110,8 +117,8 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
       .finally(() => setLoading(false));
   }, [name, scope]);
 
-  if (loading && !progress) return <p className="text-sm text-zinc-400">Loading progress…</p>;
-  if (error) return <p className="text-sm text-red-500">{error}</p>;
+  if (loading && !progress) return <p className="text-sm text-[var(--ink-soft)]">Loading progress…</p>;
+  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
   if (!progress) return null;
 
   const abbrev = lang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
@@ -129,16 +136,16 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-400">Showing:</span>
-        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 text-xs dark:bg-zinc-800">
+        <span className="text-xs text-[var(--ink-soft)]">Showing:</span>
+        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           {SCOPE_OPTIONS.map((s) => (
             <button
               key={s.scope}
               onClick={() => setScope(s.scope)}
               className={`rounded-full px-2 py-1 ${
                 scope === s.scope
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                  : "text-zinc-500"
+                  ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                  : "text-[var(--ink-soft)]"
               }`}
             >
               {s.label}
@@ -163,16 +170,16 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
           />
         </section>
       ) : (
-        <p className="text-sm text-zinc-400">Start reading to see your progress here.</p>
+        <p className="text-sm text-[var(--ink-soft)]">Start reading to see your progress here.</p>
       )}
 
       <section className={CARD}>
-        <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--ink-soft)]">
           🔥 {progress.activityCount} reading{progress.activityCount === 1 ? "" : "s"}{" "}
           {scope === "cycle" ? "this cycle" : "all time"}
         </h2>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium text-zinc-400">Old Testament</p>
+          <p className="text-xs font-medium text-[var(--ink-soft)]">Old Testament</p>
           {progress.perBookProgress
             .filter((b) => b.testament === "old")
             .map((b) => (
@@ -183,7 +190,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
                 totalChapters={b.totalChapters}
               />
             ))}
-          <p className="mt-2 text-xs font-medium text-zinc-400">New Testament</p>
+          <p className="mt-2 text-xs font-medium text-[var(--ink-soft)]">New Testament</p>
           {progress.perBookProgress
             .filter((b) => b.testament === "new")
             .map((b) => (
@@ -214,14 +221,14 @@ function BookGrid({
   const abbrev = lang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
   return (
     <div>
-      <h2 className="mb-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400">{title}</h2>
+      <h2 className="mb-2 text-sm font-semibold text-[var(--ink-soft)]">{title}</h2>
       <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-6">
         {BIBLE_BOOKS.filter((b) => b.testament === testament).map((b) => (
           <button
             key={b.name}
             onClick={() => onPick(b.name)}
             title={b.name}
-            className="rounded-lg border border-zinc-200 bg-white py-2 text-xs font-medium hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+            className="rounded-lg border border-[var(--line)] bg-[var(--paper-raised)] py-2 text-xs font-medium hover:border-[var(--clay)]"
           >
             {abbrev[b.name] ?? b.name}
           </button>
@@ -286,16 +293,16 @@ export default function ReadingPage() {
           setName(nameInput.trim());
         }}
       >
-        <p className="text-sm text-zinc-500">Enter your name to save your reading progress.</p>
+        <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>
         <input
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
           placeholder="Name"
-          className="rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700"
+          className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
         />
         <button
           type="submit"
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
         >
           Start
         </button>
@@ -306,13 +313,13 @@ export default function ReadingPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 text-xs dark:bg-zinc-800">
+        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           <button
             onClick={() => setSubTab("browse")}
             className={`rounded-full px-3 py-1 font-medium ${
               subTab === "browse"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             Browse
@@ -321,20 +328,20 @@ export default function ReadingPage() {
             onClick={() => setSubTab("progress")}
             className={`rounded-full px-3 py-1 font-medium ${
               subTab === "progress"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             Progress
           </button>
         </div>
-        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 text-xs dark:bg-zinc-800">
+        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           <button
             onClick={() => setLanguage("ko")}
             className={`rounded-full px-2 py-1 ${
               contentLanguage === "ko"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             한글
@@ -343,8 +350,8 @@ export default function ReadingPage() {
             onClick={() => setLanguage("en")}
             className={`rounded-full px-2 py-1 ${
               contentLanguage === "en"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             English
@@ -365,7 +372,7 @@ export default function ReadingPage() {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setSelectedBook(null)}
-            className="self-start text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            className="self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
           >
             ← Books
           </button>
@@ -375,7 +382,7 @@ export default function ReadingPage() {
               <button
                 key={c}
                 onClick={() => setSelectedChapter(c)}
-                className="rounded-lg border border-zinc-200 bg-white py-2 text-xs font-medium hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+                className="rounded-lg border border-[var(--line)] bg-[var(--paper-raised)] py-2 text-xs font-medium hover:border-[var(--clay)]"
               >
                 {c}
               </button>
@@ -388,13 +395,13 @@ export default function ReadingPage() {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setSelectedChapter(null)}
-            className="self-start text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            className="self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
           >
             ← {selectedBook}
           </button>
-          <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <section className="rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              <h2 className="text-sm font-semibold text-[var(--ink-soft)]">
                 {selectedBook} {selectedChapter}
               </h2>
               {passageText && (
@@ -412,8 +419,8 @@ export default function ReadingPage() {
                 </button>
               )}
             </div>
-            {loading && <p className="text-sm text-zinc-400">Loading…</p>}
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {loading && <p className="text-sm text-[var(--ink-soft)]">Loading…</p>}
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             {passageText && <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>}
           </section>
         </div>

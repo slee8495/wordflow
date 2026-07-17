@@ -1,8 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf3e6;
+  --foreground: #3a2e26;
+
+  /* Warm palette — parchment ground with a clay/gold accent pair. Used throughout via
+     arbitrary-value Tailwind classes, e.g. bg-[var(--paper)], so the palette has one source
+     of truth instead of hex literals scattered across components. */
+  --paper: #faf3e6;
+  --paper-raised: #fffaf1;
+  --ink: #3a2e26;
+  --ink-soft: #6b5c4d;
+  --line: #e4d5c1;
+  --clay: #b85c34;
+  --clay-deep: #9c4726;
+  --clay-tint: #f0dcc9;
+  --gold: #a8792f;
+  --gold-tint: #f1e2c4;
+  --good: #4f7a52;
 }
 
 @theme inline {
@@ -14,8 +29,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #221a14;
+    --foreground: #f1e6d8;
+
+    --paper: #221a14;
+    --paper-raised: #2b2119;
+    --ink: #f1e6d8;
+    --ink-soft: #c4b3a0;
+    --line: #40331f;
+    --clay: #e08a5a;
+    --clay-deep: #f0a374;
+    --clay-tint: #3a2717;
+    --gold: #d9ac5e;
+    --gold-tint: #362a16;
+    --good: #7fae82;
   }
 }
 

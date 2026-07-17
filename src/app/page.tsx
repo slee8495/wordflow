@@ -39,11 +39,11 @@ function Section({
   speaking?: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <section className="rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-4 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+        <h2 className="text-sm font-semibold text-[var(--ink-soft)]">
           {title}
-          {subtitle && <span className="ml-2 font-normal text-zinc-400 dark:text-zinc-500">{subtitle}</span>}
+          {subtitle && <span className="ml-2 font-normal text-[var(--ink-soft)] opacity-70">{subtitle}</span>}
         </h2>
         {onSpeak && (
           <button
@@ -155,16 +155,16 @@ export default function Home() {
           setName(nameInput.trim());
         }}
       >
-        <p className="text-sm text-zinc-500">Enter your name to save your reading progress.</p>
+        <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>
         <input
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
           placeholder="Name"
-          className="rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700"
+          className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
         />
         <button
           type="submit"
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
         >
           Start
         </button>
@@ -193,14 +193,14 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-zinc-500">{todayLabel}</span>
-        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 text-xs dark:bg-zinc-800">
+        <span className="text-sm text-[var(--ink-soft)]">{todayLabel}</span>
+        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           <button
             onClick={() => setLanguage("ko")}
             className={`rounded-full px-2 py-1 ${
               contentLanguage === "ko"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             한글
@@ -209,8 +209,8 @@ export default function Home() {
             onClick={() => setLanguage("en")}
             className={`rounded-full px-2 py-1 ${
               contentLanguage === "en"
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-100"
-                : "text-zinc-500"
+                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--ink-soft)]"
             }`}
           >
             English
@@ -219,38 +219,38 @@ export default function Home() {
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-sm text-zinc-500">Hi {name} — today&apos;s reading</span>
+        <span className="text-sm text-[var(--ink-soft)]">Hi {name} — today&apos;s reading</span>
         <button
           onClick={() => {
             localStorage.removeItem(NAME_KEY);
             setName(null);
             setReadings([]);
           }}
-          className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+          className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
         >
           Change name
         </button>
       </div>
 
-      {loading && <p className="text-sm text-zinc-400">Preparing today&apos;s reading…</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {loading && <p className="text-sm text-[var(--ink-soft)]">Preparing today&apos;s reading…</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {readings.length > 1 && (
-        <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] px-3 py-2">
           <button
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index === 0}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
             ← Previous passage
           </button>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-[var(--ink-soft)]">
             Passage {index + 1} of {readings.length} today
           </span>
           <button
             onClick={() => setIndex((i) => Math.min(readings.length - 1, i + 1))}
             disabled={index === readings.length - 1}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
             Next passage →
           </button>
@@ -259,7 +259,7 @@ export default function Home() {
 
       {reading && (
         <>
-          <div className="rounded-xl bg-zinc-900 px-4 py-3 text-white dark:bg-zinc-100 dark:text-zinc-900">
+          <div className="rounded-xl bg-[var(--clay-deep)] px-4 py-3 text-[var(--paper-raised)]">
             <h1 className="text-lg font-semibold">{pick(reading.themeEn, reading.theme)}</h1>
           </div>
 
@@ -276,8 +276,8 @@ export default function Home() {
                     onClick={() => setPassageView("verses")}
                     className={`rounded-full px-2.5 py-1 text-xs ${
                       passageView === "verses"
-                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                        : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                        ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
+                        : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
                     }`}
                   >
                     By Verse
@@ -286,8 +286,8 @@ export default function Home() {
                     onClick={() => setPassageView("story")}
                     className={`rounded-full px-2.5 py-1 text-xs ${
                       passageView === "story"
-                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                        : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                        ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
+                        : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
                     }`}
                   >
                     As a Story
@@ -334,7 +334,7 @@ export default function Home() {
                 href={worshipLink.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                className="text-sm text-[var(--clay-deep)] hover:underline"
               >
                 🎵 {worshipLink.title}
               </a>
@@ -345,7 +345,7 @@ export default function Home() {
             <button
               onClick={readNext}
               disabled={generatingNext}
-              className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-zinc-600 dark:hover:text-zinc-300"
+              className="rounded-lg border border-dashed border-[var(--line)] px-3 py-2 text-sm text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
             >
               {generatingNext ? "Generating…" : "Done for today — read the next passage →"}
             </button>
