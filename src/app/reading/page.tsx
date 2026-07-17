@@ -8,10 +8,12 @@ import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
 const NAME_KEY = "wordflow:name";
 const LANG_KEY = "wordflow:lang";
 
-// Sequential blue from the design system's validated palette — one hue for magnitude, constant
-// across a bar chart where length (not lightness) already carries the value.
-const METER_FILL = "bg-[#2a78d6] dark:bg-[#3987e5]";
-const METER_TRACK = "bg-[#cde2fb] dark:bg-zinc-800";
+// Warm amber (the palette's validated "orange" categorical slot) instead of the default
+// sequential blue — reads more like a devotional/QT app, less like a SaaS analytics tool. One
+// hue for magnitude, constant across a bar chart where length (not lightness) carries the value.
+const METER_FILL = "bg-[#eb6834] dark:bg-[#d95926]";
+const METER_TRACK = "bg-[#eb6834]/15 dark:bg-[#d95926]/20";
+const CARD = "rounded-xl border border-amber-100 bg-[#fdf8f0] p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950";
 
 type ProgressScope = "cycle" | "all";
 
@@ -30,20 +32,24 @@ type ProgressPayload = {
   activityCount: number;
 };
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+    <div className="rounded-xl border border-amber-100 bg-[#fdf8f0] p-3 dark:border-zinc-800 dark:bg-zinc-950">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        {icon} {label}
+      </p>
       <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );
 }
 
-function Meter({ label, pct, sublabel }: { label: string; pct: number; sublabel: string }) {
+function Meter({ icon, label, pct, sublabel }: { icon: string; label: string; pct: number; sublabel: string }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
+        <span className="font-medium text-zinc-700 dark:text-zinc-300">
+          {icon} {label}
+        </span>
         <span className="text-zinc-400">{sublabel}</span>
       </div>
       <div className={`h-2 w-full overflow-hidden rounded-full ${METER_TRACK}`}>
@@ -114,8 +120,9 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
-        <StatTile label="Cycles completed" value={String(progress.cycleCount)} />
+        <StatTile icon="🔄" label="Cycles completed" value={String(progress.cycleCount)} />
         <StatTile
+          icon="🗓️"
           label="Projected completion"
           value={progress.projectedCompletionDate ?? "Not enough data yet"}
         />
@@ -141,13 +148,15 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
       </div>
 
       {started ? (
-        <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <section className={`flex flex-col gap-3 ${CARD}`}>
           <Meter
+            icon="📚"
             label="Books touched"
             pct={progress.booksProgressPct}
             sublabel={`${progress.booksTouchedCount}/66 books`}
           />
           <Meter
+            icon="📖"
             label={`Currently in: ${progress.currentBook}`}
             pct={progress.currentBookProgressPct ?? 0}
             sublabel={`${progress.currentBookChaptersTouched ?? 0}/${progress.currentBookTotalChapters ?? "?"} chapters`}
@@ -157,9 +166,9 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
         <p className="text-sm text-zinc-400">Start reading to see your progress here.</p>
       )}
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <section className={CARD}>
         <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-          Activity — {progress.activityCount} reading{progress.activityCount === 1 ? "" : "s"}{" "}
+          🔥 {progress.activityCount} reading{progress.activityCount === 1 ? "" : "s"}{" "}
           {scope === "cycle" ? "this cycle" : "all time"}
         </h2>
         <div className="flex flex-col gap-1.5">
