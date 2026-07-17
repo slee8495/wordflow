@@ -1,21 +1,32 @@
 // Reading-progress analytics for the Reading tab's Progress dashboard — combines the daily
 // Claude-generated readings with whatever's been browsed in the deep-reading tab, per the
 // user's explicit ask that both activity sources count toward the same picture.
+//
+// Progress is expressed against the real Bible structure (66 books, each book's real chapter
+// count) rather than the 49-entry curriculum, which was confusing: an entry like "Genesis
+// 6:5-7:16" reads as "1 of 11 Genesis entries done" (36%), not "chapters read out of 50" — the
+// unit didn't match what a reader intuitively expects "% of Genesis" to mean. cycleCount and
+// the completion projection stay curriculum-entry-based, since those are specifically about
+// finishing the curriculum loop, a different (and still well-defined) concept.
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, deepReadingLogs, readings, type Profile } from "@/db/schema";
-import { BIBLE_BOOKS } from "@/lib/bibleBooks";
+import { BIBLE_BOOKS, chapterCountForBook } from "@/lib/bibleBooks";
 import { pacificDateString } from "@/lib/date";
+import { parsePassageRef } from "@/lib/passageRef";
 
 const TRAILING_PACE_DAYS = 14;
 
 export type ProgressPayload = {
   cycleCount: number;
-  cycleProgressPct: number;
+  booksTouchedCount: number;
+  booksProgressPct: number; // booksTouchedCount / 66 * 100
   currentBook: string | null;
-  currentBookProgressPct: number | null;
+  currentBookChaptersTouched: number | null;
+  currentBookTotalChapters: number | null;
+  currentBookProgressPct: number | null; // chaptersTouched / totalChapters * 100, for currentBook
   projectedCompletionDate: string | null; // YYYY-MM-DD, Pacific
-  perBookCounts: { book: string; testament: "old" | "new"; count: number }[];
+  perBookProgress: { book: string; testament: "old" | "new"; chaptersTouched: number; totalChapters: number; pct: number }[];
   recentActivityCount: number;
   recentActivityDays: number;
 };
@@ -24,12 +35,51 @@ function daysAgoDateString(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// Every chapter a profile has touched, per book — from daily readings (whose curriculum
+// passageRef may span several chapters, e.g. "Genesis 6:5-7:16" touches both 6 and 7) and from
+// the deep-reading tab's explicit per-chapter log.
+async function getTouchedChapters(profileId: number): Promise<Map<string, Set<number>>> {
+  const touched = new Map<string, Set<number>>();
+
+  const readingRows = await db
+    .select({ passageRef: curriculumItems.passageRef })
+    .from(readings)
+    .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
+    .where(eq(readings.profileId, profileId));
+
+  for (const r of readingRows) {
+    const p = parsePassageRef(r.passageRef);
+    const set = touched.get(p.book) ?? new Set<number>();
+    for (let c = p.startChapter; c <= p.endChapter; c++) set.add(c);
+    touched.set(p.book, set);
+  }
+
+  const deepRows = await db
+    .select({ book: deepReadingLogs.book, chapter: deepReadingLogs.chapter })
+    .from(deepReadingLogs)
+    .where(eq(deepReadingLogs.profileId, profileId));
+
+  for (const r of deepRows) {
+    const set = touched.get(r.book) ?? new Set<number>();
+    set.add(r.chapter);
+    touched.set(r.book, set);
+  }
+
+  return touched;
+}
+
 export async function getReadingProgress(profile: Profile, days: number): Promise<ProgressPayload> {
   const [{ count: curriculumLength }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(curriculumItems);
 
+  const touchedChapters = await getTouchedChapters(profile.id);
+  const booksTouchedCount = touchedChapters.size;
+  const booksProgressPct = (booksTouchedCount / BIBLE_BOOKS.length) * 100;
+
   let currentBook: string | null = null;
+  let currentBookChaptersTouched: number | null = null;
+  let currentBookTotalChapters: number | null = null;
   let currentBookProgressPct: number | null = null;
 
   // lastReadDate is only set once a profile has actually generated a reading — before that,
@@ -43,48 +93,28 @@ export async function getReadingProgress(profile: Profile, days: number): Promis
       .limit(1);
     if (item) {
       currentBook = item.book;
-      const [range] = await db
-        .select({
-          min: sql<number>`min(${curriculumItems.orderIndex})::int`,
-          max: sql<number>`max(${curriculumItems.orderIndex})::int`,
-        })
-        .from(curriculumItems)
-        .where(eq(curriculumItems.book, item.book));
-      if (range) {
-        const span = range.max - range.min + 1;
-        currentBookProgressPct = ((justReadIndex - range.min + 1) / span) * 100;
+      currentBookTotalChapters = chapterCountForBook(item.book);
+      currentBookChaptersTouched = touchedChapters.get(item.book)?.size ?? 0;
+      if (currentBookTotalChapters) {
+        currentBookProgressPct = (currentBookChaptersTouched / currentBookTotalChapters) * 100;
       }
     }
   }
 
-  const cycleProgressPct = curriculumLength > 0 ? (profile.cursorPosition / curriculumLength) * 100 : 0;
-
-  // Per-book counts: merge daily-Claude-reading activity with deep-reading-tab activity.
-  const readingCounts = await db
-    .select({ book: curriculumItems.book, count: sql<number>`count(*)::int` })
-    .from(readings)
-    .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
-    .where(eq(readings.profileId, profile.id))
-    .groupBy(curriculumItems.book);
-
-  const deepCounts = await db
-    .select({ book: deepReadingLogs.book, count: sql<number>`count(*)::int` })
-    .from(deepReadingLogs)
-    .where(eq(deepReadingLogs.profileId, profile.id))
-    .groupBy(deepReadingLogs.book);
-
-  const countByBook = new Map<string, number>();
-  for (const r of readingCounts) countByBook.set(r.book, (countByBook.get(r.book) ?? 0) + r.count);
-  for (const r of deepCounts) countByBook.set(r.book, (countByBook.get(r.book) ?? 0) + r.count);
-
-  const perBookCounts = BIBLE_BOOKS.map((b) => ({
-    book: b.name,
-    testament: b.testament,
-    count: countByBook.get(b.name) ?? 0,
-  }));
+  const perBookProgress = BIBLE_BOOKS.map((b) => {
+    const chaptersTouched = touchedChapters.get(b.name)?.size ?? 0;
+    return {
+      book: b.name,
+      testament: b.testament,
+      chaptersTouched,
+      totalChapters: b.chapters,
+      pct: (chaptersTouched / b.chapters) * 100,
+    };
+  });
 
   // Trailing pace for the completion projection — a fixed window, independent of the UI's
-  // requested `days` filter (which only affects recentActivityCount below).
+  // requested `days` filter (which only affects recentActivityCount below). Stays curriculum-
+  // entry-based: it's projecting when the CURRICULUM LOOP finishes, not Bible chapter coverage.
   const paceSince = daysAgoDateString(TRAILING_PACE_DAYS);
   const [readingPace] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -111,11 +141,14 @@ export async function getReadingProgress(profile: Profile, days: number): Promis
 
   return {
     cycleCount: profile.cycleCount,
-    cycleProgressPct,
+    booksTouchedCount,
+    booksProgressPct,
     currentBook,
+    currentBookChaptersTouched,
+    currentBookTotalChapters,
     currentBookProgressPct,
     projectedCompletionDate,
-    perBookCounts,
+    perBookProgress,
     recentActivityCount: (readingRecent?.count ?? 0) + (deepRecent?.count ?? 0),
     recentActivityDays: days,
   };

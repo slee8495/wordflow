@@ -15,11 +15,14 @@ const METER_TRACK = "bg-[#cde2fb] dark:bg-zinc-800";
 
 type ProgressPayload = {
   cycleCount: number;
-  cycleProgressPct: number;
+  booksTouchedCount: number;
+  booksProgressPct: number;
   currentBook: string | null;
+  currentBookChaptersTouched: number | null;
+  currentBookTotalChapters: number | null;
   currentBookProgressPct: number | null;
   projectedCompletionDate: string | null;
-  perBookCounts: { book: string; testament: "old" | "new"; count: number }[];
+  perBookProgress: { book: string; testament: "old" | "new"; chaptersTouched: number; totalChapters: number; pct: number }[];
   recentActivityCount: number;
   recentActivityDays: number;
 };
@@ -50,15 +53,25 @@ function Meter({ label, pct, sublabel }: { label: string; pct: number; sublabel:
   );
 }
 
-function BookBar({ label, count, max }: { label: string; count: number; max: number }) {
-  const pct = max > 0 ? (count / max) * 100 : 0;
+function BookBar({
+  label,
+  chaptersTouched,
+  totalChapters,
+}: {
+  label: string;
+  chaptersTouched: number;
+  totalChapters: number;
+}) {
+  const pct = totalChapters > 0 ? (chaptersTouched / totalChapters) * 100 : 0;
   return (
     <div className="flex items-center gap-2">
       <span className="w-10 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
       <div className={`h-2 flex-1 overflow-hidden rounded-full ${METER_TRACK}`}>
-        <div className={`h-full rounded-full ${METER_FILL}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${METER_FILL}`} style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
-      <span className="w-5 shrink-0 text-right text-xs text-zinc-400 tabular-nums">{count}</span>
+      <span className="w-10 shrink-0 text-right text-xs text-zinc-400 tabular-nums">
+        {chaptersTouched}/{totalChapters}
+      </span>
     </div>
   );
 }
@@ -95,7 +108,6 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
   if (!progress) return null;
 
   const abbrev = lang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
-  const maxCount = Math.max(1, ...progress.perBookCounts.map((b) => b.count));
   const started = progress.currentBook !== null;
 
   return (
@@ -110,11 +122,15 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
 
       {started ? (
         <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <Meter label="This cycle" pct={progress.cycleProgressPct} sublabel={`${progress.cycleProgressPct.toFixed(0)}%`} />
+          <Meter
+            label="Books touched"
+            pct={progress.booksProgressPct}
+            sublabel={`${progress.booksTouchedCount}/66 books`}
+          />
           <Meter
             label={`Currently in: ${progress.currentBook}`}
             pct={progress.currentBookProgressPct ?? 0}
-            sublabel={`${(progress.currentBookProgressPct ?? 0).toFixed(0)}%`}
+            sublabel={`${progress.currentBookChaptersTouched ?? 0}/${progress.currentBookTotalChapters ?? "?"} chapters`}
           />
         </section>
       ) : (
@@ -144,16 +160,26 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
         </div>
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-medium text-zinc-400">Old Testament</p>
-          {progress.perBookCounts
+          {progress.perBookProgress
             .filter((b) => b.testament === "old")
             .map((b) => (
-              <BookBar key={b.book} label={abbrev[b.book] ?? b.book} count={b.count} max={maxCount} />
+              <BookBar
+                key={b.book}
+                label={abbrev[b.book] ?? b.book}
+                chaptersTouched={b.chaptersTouched}
+                totalChapters={b.totalChapters}
+              />
             ))}
           <p className="mt-2 text-xs font-medium text-zinc-400">New Testament</p>
-          {progress.perBookCounts
+          {progress.perBookProgress
             .filter((b) => b.testament === "new")
             .map((b) => (
-              <BookBar key={b.book} label={abbrev[b.book] ?? b.book} count={b.count} max={maxCount} />
+              <BookBar
+                key={b.book}
+                label={abbrev[b.book] ?? b.book}
+                chaptersTouched={b.chaptersTouched}
+                totalChapters={b.totalChapters}
+              />
             ))}
         </div>
       </section>
