@@ -26,7 +26,6 @@ export const curriculumItems = pgTable("curriculum_items", {
 });
 
 export type WorshipLink = { title: string; url: string };
-export type SermonLink = { title: string; channel: string; url: string };
 
 // A lightweight name-based profile — no password/auth yet. `name` is the login.
 export const profiles = pgTable("profiles", {
@@ -70,8 +69,10 @@ export const readings = pgTable("readings", {
   passageTextKoStory: text("passage_text_ko_story"),
   passageTextEn: text("passage_text_en"),
 
-  worshipLinks: jsonb("worship_links").$type<WorshipLink[]>().default([]),
-  sermonLinks: jsonb("sermon_links").$type<SermonLink[]>().default([]),
+  // One worship pick per language, not a mixed list — the UI only ever shows the pick that
+  // matches the active content-language toggle.
+  worshipLinkKo: jsonb("worship_link_ko").$type<WorshipLink | null>(),
+  worshipLinkEn: jsonb("worship_link_en").$type<WorshipLink | null>(),
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

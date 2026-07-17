@@ -1,5 +1,5 @@
-// Auto-matches worship songs / sermons to today's theme via YouTube Data API v3 search —
-// no hand-curated video list to maintain, at the cost of occasional off-target results.
+// Auto-matches a worship song to today's theme via YouTube Data API v3 search — no hand-curated
+// video list to maintain, at the cost of occasional off-target results.
 export type YoutubeResult = { title: string; channelTitle: string; url: string };
 
 async function searchYoutube(
@@ -60,8 +60,4 @@ export async function searchWorshipSongs(
     ko: pickAllowlisted(koResults, KOREAN_WORSHIP_CHANNELS),
     en: pickAllowlisted(enResults, ENGLISH_WORSHIP_CHANNELS),
   };
-}
-
-export function searchSermons(theme: string, passageRef: string, maxResults = 2): Promise<YoutubeResult[]> {
-  return searchYoutube(`설교 ${passageRef} ${theme}`, maxResults);
 }

@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { curriculumItems, profiles, readings, type Profile } from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
-import { searchWorshipSongs, searchSermons } from "@/lib/youtube";
+import { searchWorshipSongs } from "@/lib/youtube";
 import { todayDateString } from "@/lib/date";
 
 const bilingualField = (description: string) =>
@@ -99,13 +99,10 @@ async function buildReading(profile: Profile, forDate: string) {
       .join("\n\n"),
   });
 
-  const [worship, sermonLinks] = await Promise.all([
-    searchWorshipSongs(object.theme.ko, object.theme.en).catch(() => ({ ko: null, en: null })),
-    searchSermons(object.theme.ko, item.passageRef).catch(() => []),
-  ]);
-  const worshipLinks = [worship.ko, worship.en]
-    .filter((w): w is NonNullable<typeof w> => w !== null)
-    .map((w) => ({ title: w.title, url: w.url }));
+  const worship = await searchWorshipSongs(object.theme.ko, object.theme.en).catch(() => ({
+    ko: null,
+    en: null,
+  }));
 
   const [row] = await db
     .insert(readings)
@@ -124,8 +121,8 @@ async function buildReading(profile: Profile, forDate: string) {
       passageTextKoVerses: koVerses,
       passageTextKoStory: koStory,
       passageTextEn: en,
-      worshipLinks,
-      sermonLinks: sermonLinks.map((s) => ({ title: s.title, channel: s.channelTitle, url: s.url })),
+      worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
+      worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
     })
     .returning();
 
@@ -166,6 +163,32 @@ export async function generateDailyReading(profile: Profile) {
 // reading keep going instead of waiting for tomorrow's cron.
 export async function generateNextReading(profile: Profile) {
   return buildReading(profile, todayDateString());
+}
+
+// All of today's readings for a profile, oldest first, so the UI can page back and forth
+// through however many times someone has read ahead today. Generates the first one if none
+// exist yet, same as generateDailyReading.
+export async function getTodayReadings(profile: Profile) {
+  const forDate = todayDateString();
+
+  const existing = await db
+    .select()
+    .from(readings)
+    .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
+    .orderBy(readings.createdAt);
+
+  const rows = existing.length > 0 ? existing : [await buildReading(profile, forDate)];
+
+  return Promise.all(
+    rows.map(async (r) => {
+      const [item] = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.id, r.curriculumItemId))
+        .limit(1);
+      return { ...r, passageRef: item?.passageRef ?? null };
+    }),
+  );
 }
 
 export async function findOrCreateProfile(name: string): Promise<Profile> {

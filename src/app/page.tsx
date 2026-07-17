@@ -8,7 +8,6 @@ const NAME_KEY = "wordflow:name";
 const LANG_KEY = "wordflow:lang";
 
 type WorshipLink = { title: string; url: string };
-type SermonLink = { title: string; channel: string; url: string };
 type Reading = {
   theme: string;
   themeEn: string | null;
@@ -22,8 +21,8 @@ type Reading = {
   passageTextKoStory: string | null;
   passageTextEn: string | null;
   passageRef: string | null;
-  worshipLinks: WorshipLink[];
-  sermonLinks: SermonLink[];
+  worshipLinkKo: WorshipLink | null;
+  worshipLinkEn: WorshipLink | null;
 };
 
 function Section({
@@ -65,7 +64,8 @@ function Section({
 export default function Home() {
   const [name, setName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState("");
-  const [reading, setReading] = useState<Reading | null>(null);
+  const [readings, setReadings] = useState<Reading[]>([]);
+  const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
@@ -94,7 +94,10 @@ export default function Home() {
         if (!res.ok) throw new Error("failed to load today's reading");
         return res.json();
       })
-      .then(({ reading }) => setReading(reading))
+      .then(({ readings }: { readings: Reading[] }) => {
+        setReadings(readings);
+        setIndex(readings.length - 1);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, [name]);
@@ -123,7 +126,8 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("failed to generate the next reading");
       const { reading } = await res.json();
-      setReading(reading);
+      setReadings((current) => [...current, reading]);
+      setIndex((current) => current + 1);
       setPassageView("verses");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -168,6 +172,7 @@ export default function Home() {
     );
   }
 
+  const reading = readings[index] ?? null;
   const pick = (en: string | null | undefined, ko: string) => (contentLanguage === "en" ? (en ?? ko) : ko);
 
   const passageText =
@@ -182,6 +187,8 @@ export default function Home() {
       ? formatPassageRefEnglish(reading.passageRef)
       : formatPassageRefKorean(reading.passageRef)
     : null;
+
+  const worshipLink = reading ? (contentLanguage === "en" ? reading.worshipLinkEn : reading.worshipLinkKo) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -217,7 +224,7 @@ export default function Home() {
           onClick={() => {
             localStorage.removeItem(NAME_KEY);
             setName(null);
-            setReading(null);
+            setReadings([]);
           }}
           className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
         >
@@ -227,6 +234,28 @@ export default function Home() {
 
       {loading && <p className="text-sm text-zinc-400">Preparing today&apos;s reading…</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
+
+      {readings.length > 1 && (
+        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500">
+          <button
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+            className="disabled:opacity-30"
+          >
+            ← Previous
+          </button>
+          <span>
+            {index + 1} / {readings.length}
+          </span>
+          <button
+            onClick={() => setIndex((i) => Math.min(readings.length - 1, i + 1))}
+            disabled={index === readings.length - 1}
+            className="disabled:opacity-30"
+          >
+            Next →
+          </button>
+        </div>
+      )}
 
       {reading && (
         <>
@@ -299,41 +328,28 @@ export default function Home() {
             </p>
           </Section>
 
-          {reading.worshipLinks.length > 0 && (
+          {worshipLink && (
             <Section title="Worship">
-              <ul className="flex flex-col gap-1.5">
-                {reading.worshipLinks.map((link) => (
-                  <li key={link.url}>
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
-                      🎵 {link.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <a
+                href={worshipLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+              >
+                🎵 {worshipLink.title}
+              </a>
             </Section>
           )}
 
-          {reading.sermonLinks.length > 0 && (
-            <Section title="Sermon">
-              <ul className="flex flex-col gap-1.5">
-                {reading.sermonLinks.map((link) => (
-                  <li key={link.url}>
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
-                      🎤 {link.title} <span className="text-zinc-400">· {link.channel}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </Section>
+          {index === readings.length - 1 && (
+            <button
+              onClick={readNext}
+              disabled={generatingNext}
+              className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-zinc-600 dark:hover:text-zinc-300"
+            >
+              {generatingNext ? "Generating…" : "Done for today — read the next passage →"}
+            </button>
           )}
-
-          <button
-            onClick={readNext}
-            disabled={generatingNext}
-            className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-zinc-600 dark:hover:text-zinc-300"
-          >
-            {generatingNext ? "Generating…" : "Done for today — read the next passage →"}
-          </button>
         </>
       )}
     </div>
