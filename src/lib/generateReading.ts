@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { curriculumItems, profiles, readings, type Profile } from "@/db/schema";
+import { curriculumItems, profiles, readings, type CurriculumItem, type Profile } from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs } from "@/lib/youtube";
@@ -63,23 +63,15 @@ async function fetchPassageTexts(passageRef: string) {
   return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en };
 }
 
-// Always generates a fresh reading at the profile's current cursor position and advances the
-// cursor — the building block for both the idempotent daily path and the user-triggered
-// "read next" action. forDate is which calendar date the row is stamped with; readings are no
-// longer unique per (profile, date), so a profile can have several from the same day.
-async function buildReading(profile: Profile, forDate: string) {
-  const [total] = await db.select({ count: sql<number>`count(*)` }).from(curriculumItems);
-  const curriculumLength = Number(total?.count ?? 0);
-  if (curriculumLength === 0) throw new Error("curriculum_items is empty — seed it first");
-
-  const position = profile.cursorPosition % curriculumLength;
-  const [item] = await db
-    .select()
-    .from(curriculumItems)
-    .where(eq(curriculumItems.orderIndex, position))
-    .limit(1);
-  if (!item) throw new Error(`No curriculum item at order_index ${position}`);
-
+// Generates and inserts a reading for a specific curriculum item — the shared content-generation
+// step, with no opinion on cursor position. Optional createdAt lets a caller backdate a row so it
+// sorts correctly among a profile's other readings for the day (used by catchUpReading below).
+async function buildReadingForItem(
+  profile: Profile,
+  forDate: string,
+  item: CurriculumItem,
+  createdAt?: Date,
+) {
   const { koVerses, koStory, en } = await fetchPassageTexts(item.passageRef);
 
   const { object } = await generateObject({
@@ -123,15 +115,48 @@ async function buildReading(profile: Profile, forDate: string) {
       passageTextEn: en,
       worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
       worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
+      ...(createdAt ? { createdAt } : {}),
     })
     .returning();
+
+  return { ...row, passageRef: item.passageRef };
+}
+
+// Always generates a fresh reading at the profile's current cursor position and advances the
+// cursor — the building block for both the idempotent daily path and the user-triggered
+// "read next" action. forDate is which calendar date the row is stamped with; readings are no
+// longer unique per (profile, date), so a profile can have several from the same day.
+async function buildReading(profile: Profile, forDate: string) {
+  const [total] = await db.select({ count: sql<number>`count(*)` }).from(curriculumItems);
+  const curriculumLength = Number(total?.count ?? 0);
+  if (curriculumLength === 0) throw new Error("curriculum_items is empty — seed it first");
+
+  const position = profile.cursorPosition % curriculumLength;
+  const [item] = await db
+    .select()
+    .from(curriculumItems)
+    .where(eq(curriculumItems.orderIndex, position))
+    .limit(1);
+  if (!item) throw new Error(`No curriculum item at order_index ${position}`);
+
+  const result = await buildReadingForItem(profile, forDate, item);
 
   await db
     .update(profiles)
     .set({ cursorPosition: (position + 1) % curriculumLength, lastReadDate: forDate })
     .where(eq(profiles.id, profile.id));
 
-  return { ...row, passageRef: item.passageRef };
+  return result;
+}
+
+// Repair helper: generates a reading for a specific curriculum orderIndex without touching the
+// profile's cursor. For backfilling a chapter whose generated content was lost (e.g. deleted by
+// mistake) without re-walking or disturbing the profile's forward progress. createdAt lets the
+// row be backdated so it sorts into its correct narrative position among that day's readings.
+export async function catchUpReading(profile: Profile, orderIndex: number, forDate: string, createdAt?: Date) {
+  const [item] = await db.select().from(curriculumItems).where(eq(curriculumItems.orderIndex, orderIndex)).limit(1);
+  if (!item) throw new Error(`No curriculum item at order_index ${orderIndex}`);
+  return buildReadingForItem(profile, forDate, item, createdAt);
 }
 
 // Returns today's most recent reading if one already exists, otherwise generates the first one
