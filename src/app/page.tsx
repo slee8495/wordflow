@@ -236,23 +236,23 @@ export default function Home() {
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       {readings.length > 1 && (
-        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500">
+        <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
           <button
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index === 0}
-            className="disabled:opacity-30"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            ← Previous
+            ← Previous passage
           </button>
-          <span>
-            {index + 1} / {readings.length}
+          <span className="text-xs text-zinc-400">
+            Passage {index + 1} of {readings.length} today
           </span>
           <button
             onClick={() => setIndex((i) => Math.min(readings.length - 1, i + 1))}
             disabled={index === readings.length - 1}
-            className="disabled:opacity-30"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            Next →
+            Next passage →
           </button>
         </div>
       )}
