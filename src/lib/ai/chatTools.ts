@@ -18,6 +18,7 @@ export const recommendWorship = tool({
   description: "Search YouTube for worship songs matching a mood, theme, or Bible passage.",
   inputSchema: z.object({ theme: z.string().describe("Theme, mood, or topic to find worship songs for") }),
   execute: async ({ theme }) => {
-    return searchWorshipSongs(theme, 5);
+    const { ko, en } = await searchWorshipSongs(theme, theme);
+    return [ko, en].filter((w): w is NonNullable<typeof w> => w !== null);
   },
 });

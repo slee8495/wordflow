@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ChatWidget } from "./ChatWidget";
+import { AppNav } from "./AppNav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="ko"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-100">
@@ -45,8 +46,9 @@ export default function RootLayout({
           className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur dark:border-zinc-800 dark:bg-black/90"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
-          <div className="mx-auto flex max-w-2xl items-center px-4 py-3">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
             <span className="text-lg font-semibold tracking-tight">📖 Wordflow</span>
+            <AppNav />
           </div>
         </header>
         <main

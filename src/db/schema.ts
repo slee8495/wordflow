@@ -58,6 +58,13 @@ export const readings = pgTable(
     historicalContext: text("historical_context").notNull(),
     personalMessage: text("personal_message").notNull(),
 
+    // English counterparts of the four fields above, written in the same generateObject
+    // call — lets the UI offer a content-language toggle independent of the passage text.
+    themeEn: varchar("theme_en", { length: 128 }),
+    storySummaryEn: text("story_summary_en"),
+    historicalContextEn: text("historical_context_en"),
+    personalMessageEn: text("personal_message_en"),
+
     // Claude-rendered Korean text (no reliable Bible API for 새번역 — see src/lib/bible.ts),
     // kept in both a verse-numbered form and a continuous-story form so the UI can offer either.
     passageTextKoVerses: text("passage_text_ko_verses"),

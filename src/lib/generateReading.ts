@@ -8,17 +8,21 @@ import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs, searchSermons } from "@/lib/youtube";
 import { todayDateString } from "@/lib/date";
 
+const bilingualField = (description: string) =>
+  z.object({
+    ko: z.string().describe(`${description} (Korean)`),
+    en: z.string().describe(`${description} (English)`),
+  });
+
 const readingSchema = z.object({
-  theme: z.string().describe("A one-line theme for today's passage"),
-  storySummary: z
-    .string()
-    .describe("A story-like, engaging summary of what happens in this passage and how it fits the whole Bible"),
-  historicalContext: z
-    .string()
-    .describe("What comes before/after this passage and the historical background needed to understand it"),
-  personalMessage: z
-    .string()
-    .describe("A reflective message on what God might be saying to the reader today"),
+  theme: bilingualField("A one-line theme for today's passage"),
+  storySummary: bilingualField(
+    "A story-like, engaging summary of what happens in this passage and how it fits the whole Bible",
+  ),
+  historicalContext: bilingualField(
+    "What comes before/after this passage and the historical background needed to understand it",
+  ),
+  personalMessage: bilingualField("A reflective message on what God might be saying to the reader today"),
 });
 
 const koreanPassageSchema = z.object({
@@ -69,7 +73,14 @@ export async function generateDailyReading(profile: Profile) {
     .from(readings)
     .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
     .limit(1);
-  if (existing) return existing;
+  if (existing) {
+    const [existingItem] = await db
+      .select()
+      .from(curriculumItems)
+      .where(eq(curriculumItems.id, existing.curriculumItemId))
+      .limit(1);
+    return { ...existing, passageRef: existingItem?.passageRef ?? null };
+  }
 
   const [total] = await db.select({ count: sql<number>`count(*)` }).from(curriculumItems);
   const curriculumLength = Number(total?.count ?? 0);
@@ -90,8 +101,9 @@ export async function generateDailyReading(profile: Profile) {
     schema: readingSchema,
     system:
       "You write short, engaging daily Bible reading companions for a personal QT-style app called Wordflow. " +
-      "Tone: story-like, warm, never dry or academic. Write in Korean. Keep each field to about 3-5 sentences " +
-      "(the whole thing should read aloud in roughly 5 minutes).",
+      "Tone: story-like, warm, never dry or academic. Write every field in BOTH Korean and English — the two " +
+      "should carry the same meaning, not be a literal translation of each other, each natural in its own " +
+      "language. Keep each field to about 3-5 sentences (the whole thing should read aloud in roughly 5 minutes).",
     prompt: [
       `Today's passage: ${item.passageRef} (theme bucket: ${item.theme})`,
       koStory ? `한글 본문(이야기체):\n${koStory}` : null,
@@ -101,10 +113,13 @@ export async function generateDailyReading(profile: Profile) {
       .join("\n\n"),
   });
 
-  const [worshipLinks, sermonLinks] = await Promise.all([
-    searchWorshipSongs(object.theme).catch(() => []),
-    searchSermons(object.theme, item.passageRef).catch(() => []),
+  const [worship, sermonLinks] = await Promise.all([
+    searchWorshipSongs(object.theme.ko, object.theme.en).catch(() => ({ ko: null, en: null })),
+    searchSermons(object.theme.ko, item.passageRef).catch(() => []),
   ]);
+  const worshipLinks = [worship.ko, worship.en]
+    .filter((w): w is NonNullable<typeof w> => w !== null)
+    .map((w) => ({ title: w.title, url: w.url }));
 
   const [row] = await db
     .insert(readings)
@@ -112,10 +127,14 @@ export async function generateDailyReading(profile: Profile) {
       profileId: profile.id,
       curriculumItemId: item.id,
       forDate,
-      theme: object.theme,
-      storySummary: object.storySummary,
-      historicalContext: object.historicalContext,
-      personalMessage: object.personalMessage,
+      theme: object.theme.ko,
+      storySummary: object.storySummary.ko,
+      historicalContext: object.historicalContext.ko,
+      personalMessage: object.personalMessage.ko,
+      themeEn: object.theme.en,
+      storySummaryEn: object.storySummary.en,
+      historicalContextEn: object.historicalContext.en,
+      personalMessageEn: object.personalMessage.en,
       passageTextKoVerses: koVerses,
       passageTextKoStory: koStory,
       passageTextEn: en,
@@ -129,7 +148,7 @@ export async function generateDailyReading(profile: Profile) {
     .set({ cursorPosition: (position + 1) % curriculumLength, lastReadDate: forDate })
     .where(eq(profiles.id, profile.id));
 
-  return row;
+  return { ...row, passageRef: item.passageRef };
 }
 
 export async function findOrCreateProfile(name: string): Promise<Profile> {
