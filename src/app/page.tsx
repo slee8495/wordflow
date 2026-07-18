@@ -289,6 +289,11 @@ export default function Home() {
                 </div>
               )}
               <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>
+              <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
+                {contentLanguage === "en"
+                  ? "NLT (New Living Translation)"
+                  : "AI가 영어 NLT 성경을 바탕으로 쉬운 한글로 다시 표현한 본문이에요 (개역개정 등 특정 번역본이 아니에요)."}
+              </p>
             </Section>
           )}
 

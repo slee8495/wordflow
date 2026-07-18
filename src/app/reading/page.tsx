@@ -418,7 +418,16 @@ export default function ReadingPage() {
             </div>
             {loading && <p className="text-sm text-[var(--ink-soft)]">Loading…</p>}
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-            {passageText && <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>}
+            {passageText && (
+              <>
+                <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>
+                <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
+                  {contentLanguage === "en"
+                    ? "NLT (New Living Translation)"
+                    : "AI가 영어 NLT 성경을 바탕으로 쉬운 한글로 다시 표현한 본문이에요 (개역개정 등 특정 번역본이 아니에요)."}
+                </p>
+              </>
+            )}
           </section>
         </div>
       )}
