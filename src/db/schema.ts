@@ -9,6 +9,7 @@ import {
   date,
   pgEnum,
   unique,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const testamentEnum = pgEnum("testament", ["old", "new"]);
@@ -95,6 +96,14 @@ export const readings = pgTable("readings", {
   // matches the active content-language toggle.
   worshipLinkKo: jsonb("worship_link_ko").$type<WorshipLink | null>(),
   worshipLinkEn: jsonb("worship_link_en").$type<WorshipLink | null>(),
+
+  // false for a reading that's been generated ahead of time but not shown to the profile yet —
+  // the one-item-deep prefetch buffer that makes "read next" instant instead of waiting on a
+  // fresh generation. Excluded from every "today's readings" query until revealed() flips this
+  // to true and restamps forDate to the date it's actually being shown on. Defaults true so
+  // every pre-existing row (and any row inserted by code that doesn't know about prefetching,
+  // e.g. catchUpReading) stays visible as before.
+  revealed: boolean("revealed").default(true).notNull(),
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

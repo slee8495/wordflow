@@ -1,4 +1,5 @@
 import { generateObject, generateText } from "ai";
+import { after } from "next/server";
 import { z } from "zod";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -87,11 +88,14 @@ async function fetchPassageTexts(passageRef: string) {
 // Generates and inserts a reading for a specific curriculum item — the shared content-generation
 // step, with no opinion on cursor position. Optional createdAt lets a caller backdate a row so it
 // sorts correctly among a profile's other readings for the day (used by catchUpReading below).
+// `revealed = false` inserts it as a hidden prefetch buffer instead of an immediately-visible
+// reading — see revealOrGenerate/ensurePrefetchedNext below.
 async function buildReadingForItem(
   profile: Profile,
   forDate: string,
   item: CurriculumItem,
   createdAt?: Date,
+  revealed = true,
 ) {
   const { koVerses, koStory, en, enStory } = await fetchPassageTexts(item.passageRef);
 
@@ -137,6 +141,7 @@ async function buildReadingForItem(
       passageTextEnStory: enStory,
       worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
       worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
+      revealed,
       ...(createdAt ? { createdAt } : {}),
     })
     .returning();
@@ -148,7 +153,10 @@ async function buildReadingForItem(
 // cursor — the building block for both the idempotent daily path and the user-triggered
 // "read next" action. forDate is which calendar date the row is stamped with; readings are no
 // longer unique per (profile, date), so a profile can have several from the same day.
-async function buildReading(profile: Profile, forDate: string) {
+// `revealed = false` generates it as the hidden prefetch buffer (see ensurePrefetchedNext) — the
+// cursor still advances immediately either way, since the buffered item is a real committed step
+// through the curriculum, just not shown to the profile yet.
+async function buildReading(profile: Profile, forDate: string, revealed = true) {
   // season IS NULL: season entries share this table (see schema.ts) but use a disjoint
   // orderIndex range and must never be counted into the normal rotation's length/position math.
   const [total] = await db
@@ -179,7 +187,7 @@ async function buildReading(profile: Profile, forDate: string) {
   // insert below and a separately-timestamped update.
   const cycleStartTimestamp = cycleJustCompleted || isFirstReadingEver ? new Date() : undefined;
 
-  const result = await buildReadingForItem(profile, forDate, item, cycleStartTimestamp);
+  const result = await buildReadingForItem(profile, forDate, item, cycleStartTimestamp, revealed);
 
   await db
     .update(profiles)
@@ -192,6 +200,61 @@ async function buildReading(profile: Profile, forDate: string) {
     .where(eq(profiles.id, profile.id));
 
   return result;
+}
+
+// Reveals the profile's buffered next reading if one's ready — restamping it with today's date
+// and flipping it visible — instead of generating on the spot, so "next passage" feels instant.
+// Falls back to a normal synchronous buildReading() when nothing was buffered yet (the very
+// first reading ever for this profile, or the background prefetch just hadn't finished in time).
+async function revealOrGenerate(profile: Profile, forDate: string) {
+  const [hidden] = await db
+    .select()
+    .from(readings)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, false)))
+    .orderBy(readings.createdAt)
+    .limit(1);
+
+  if (hidden) {
+    const [updated] = await db
+      .update(readings)
+      .set({ forDate, revealed: true })
+      .where(eq(readings.id, hidden.id))
+      .returning();
+    const [item] = await db
+      .select()
+      .from(curriculumItems)
+      .where(eq(curriculumItems.id, updated.curriculumItemId))
+      .limit(1);
+    return { ...updated, passageRef: item?.passageRef ?? null };
+  }
+
+  return buildReading(profile, forDate);
+}
+
+// Keeps exactly one not-yet-revealed reading buffered ahead of a profile's cursor, generating it
+// in the background if missing — a no-op whenever one's already buffered. Wired up via
+// next/server's after() at every call site that can trigger a reveal, so it runs post-response
+// and never adds latency to the request that's actually waiting on a human. Re-reads the profile
+// from the DB rather than trusting a possibly-stale in-memory copy, since a reveal or a
+// synchronous buildReading() may have just advanced cursorPosition moments earlier in the same
+// request. Deliberately just one item deep — this is a "make the very next step instant" cache,
+// not a background job that keeps generating regardless of whether anyone's reading, which is
+// exactly the behavior that used to let the curriculum silently drift ahead of a profile that
+// hadn't opened the app in days.
+async function ensurePrefetchedNext(profileId: number): Promise<void> {
+  const [hidden] = await db
+    .select({ id: readings.id })
+    .from(readings)
+    .where(and(eq(readings.profileId, profileId), eq(readings.revealed, false)))
+    .limit(1);
+  if (hidden) return;
+
+  const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  if (!profile) return;
+
+  await buildReading(profile, todayDateString(), false).catch(() => {
+    // best-effort — if this fails, the next reveal just falls back to synchronous generation
+  });
 }
 
 // The FIRST reading of a calendar day (idempotent GET path only, never "read next"): if today
@@ -216,7 +279,7 @@ async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
       .limit(1);
     if (seasonItem) return buildReadingForItem(profile, forDate, seasonItem);
   }
-  return buildReading(profile, forDate);
+  return revealOrGenerate(profile, forDate);
 }
 
 // Repair helper: generates a reading for a specific curriculum orderIndex without touching the
@@ -229,19 +292,22 @@ export async function catchUpReading(profile: Profile, orderIndex: number, forDa
   return buildReadingForItem(profile, forDate, item, createdAt);
 }
 
-// Returns today's most recent reading if one already exists, otherwise generates the first one
-// for today. Idempotent for repeat calls with nothing new to do — safe for /api/today and the
-// chat assistant to call on every visit without spamming generations. This is the only place
-// the cursor advances on an ordinary day, and it only runs when a profile actually shows up —
-// there's no background job pre-generating it, so a day nobody visits doesn't silently consume
-// a cursor step; the next visit (whenever that is) picks up right where it left off.
+// Returns today's most recent reading if one already exists, otherwise reveals/generates the
+// first one for today. Idempotent for repeat calls with nothing new to do — safe for /api/today
+// and the chat assistant to call on every visit without spamming generations. The cursor only
+// ever advances when a profile actually shows up (there's no background job pre-generating it on
+// a schedule) — a day nobody visits doesn't silently consume a cursor step; the next visit
+// (whenever that is) picks up right where it left off. Also tops up the one-item prefetch buffer
+// in the background (after() — doesn't add latency here) so that visit's *next* passage is ready
+// before it's asked for.
 export async function generateDailyReading(profile: Profile) {
   const forDate = todayDateString();
+  after(() => ensurePrefetchedNext(profile.id));
 
   const [existing] = await db
     .select()
     .from(readings)
-    .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
     .orderBy(desc(readings.createdAt))
     .limit(1);
   if (existing) {
@@ -256,11 +322,14 @@ export async function generateDailyReading(profile: Profile) {
   return buildFirstReadingOfDay(profile, forDate);
 }
 
-// User-triggered "read next" action: always generates a new reading for today and advances the
-// cursor, regardless of whether one already exists for today. Lets someone who finishes today's
-// reading keep going the same day instead of waiting until they next open the app.
+// User-triggered "read next" action: reveals the buffered reading if one's ready (instant) or
+// generates on the spot as a fallback, either way advancing the cursor, regardless of whether a
+// reading already exists for today. Lets someone who finishes today's reading keep going the
+// same day instead of waiting until they next open the app. Also tops up the prefetch buffer in
+// the background for whatever comes after this one.
 export async function generateNextReading(profile: Profile) {
-  return buildReading(profile, todayDateString());
+  after(() => ensurePrefetchedNext(profile.id));
+  return revealOrGenerate(profile, todayDateString());
 }
 
 // All of today's readings for a profile, oldest first, so the UI can page back and forth
@@ -268,11 +337,12 @@ export async function generateNextReading(profile: Profile) {
 // exist yet, same as generateDailyReading.
 export async function getTodayReadings(profile: Profile) {
   const forDate = todayDateString();
+  after(() => ensurePrefetchedNext(profile.id));
 
   const existing = await db
     .select()
     .from(readings)
-    .where(sql`${readings.profileId} = ${profile.id} AND ${readings.forDate} = ${forDate}`)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
     .orderBy(readings.createdAt);
 
   const rows = existing.length > 0 ? existing : [await buildFirstReadingOfDay(profile, forDate)];
