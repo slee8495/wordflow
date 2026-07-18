@@ -2,7 +2,10 @@ import { convertToModelMessages, streamText, stepCountIs, UIMessage } from "ai";
 import { CHAT_MODEL, webSearchTool } from "@/lib/ai/model";
 import { getTodayReading, recommendWorship } from "@/lib/ai/chatTools";
 
-export const maxDuration = 60;
+// 120 rather than 60: getTodayReading can call generateDailyReading, which schedules a
+// background prefetch via after() (see src/lib/generateReading.ts) that counts against this
+// same ceiling — see src/app/api/today/route.ts for the production timeout this fixed.
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();

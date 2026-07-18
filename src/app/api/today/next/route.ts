@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findOrCreateProfile, generateNextReading } from "@/lib/generateReading";
 
-export const maxDuration = 60;
+// See src/app/api/today/route.ts for why this is 120 rather than 60 — the after()-scheduled
+// background prefetch this triggers counts against the same ceiling as the request itself.
+export const maxDuration = 120;
 
 // User-triggered "read next" — always generates a fresh reading and advances the cursor, even
 // if one already exists for today. Distinct from the idempotent GET /api/today.

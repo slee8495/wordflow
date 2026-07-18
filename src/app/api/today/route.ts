@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findOrCreateProfile, getTodayReadings } from "@/lib/generateReading";
 
-export const maxDuration = 60;
+// Generous enough to cover the worst case where this request's own generation is synchronous
+// (no prefetch buffer existed yet, ~30-40s observed) *and* the after()-scheduled background
+// prefetch for the following reading runs to completion in the same invocation afterward —
+// both count against this one ceiling. 60s clipped that combined case in production (Vercel
+// Runtime Timeout Error) even though the response itself had already been sent.
+export const maxDuration = 120;
 
 // Returns every reading generated for a name-based profile today (oldest first), generating the
 // first one on first request of the day (there's no background job pre-generating it). A profile
