@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { speak } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
+import { useUser } from "./UserProvider";
 
-const NAME_KEY = "wordflow:name";
 const LANG_KEY = "wordflow:lang";
 
 type WorshipLink = { title: string; url: string };
@@ -62,7 +62,7 @@ function Section({
 }
 
 export default function Home() {
-  const [name, setName] = useState<string | null>(null);
+  const { name, login, logout } = useUser();
   const [nameInput, setNameInput] = useState("");
   const [readings, setReadings] = useState<Reading[]>([]);
   const [index, setIndex] = useState(0);
@@ -74,10 +74,6 @@ export default function Home() {
   const [generatingNext, setGeneratingNext] = useState(false);
 
   useEffect(() => {
-    // localStorage only exists client-side, so this can't be a lazy useState initializer
-    // without risking a hydration mismatch against the server-rendered name gate.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setName(localStorage.getItem(NAME_KEY));
     const storedLang = localStorage.getItem(LANG_KEY);
     if (storedLang === "en" || storedLang === "ko") {
       setContentLanguage(storedLang);
@@ -151,8 +147,7 @@ export default function Home() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!nameInput.trim()) return;
-          localStorage.setItem(NAME_KEY, nameInput.trim());
-          setName(nameInput.trim());
+          login(nameInput);
         }}
       >
         <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>
@@ -222,8 +217,7 @@ export default function Home() {
         <span className="text-sm text-[var(--ink-soft)]">Hi {name} — today&apos;s reading</span>
         <button
           onClick={() => {
-            localStorage.removeItem(NAME_KEY);
-            setName(null);
+            logout();
             setReadings([]);
           }}
           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"

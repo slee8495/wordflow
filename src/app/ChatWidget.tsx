@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { prefetchSpeech, speak } from "@/lib/speak";
-
-const NAME_KEY = "wordflow:name";
+import { useUser } from "./UserProvider";
 
 function messageText(message: UIMessage): string {
   return message.parts
@@ -23,6 +22,7 @@ function pickRecordingMimeType(): string | undefined {
 }
 
 export function ChatWidget() {
+  const { name } = useUser();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -93,7 +93,6 @@ export function ChatWidget() {
   }
 
   function submitText(text: string) {
-    const name = typeof window !== "undefined" ? localStorage.getItem(NAME_KEY) : null;
     sendMessage({ text: name ? `[${name}] ${text}` : text });
   }
 

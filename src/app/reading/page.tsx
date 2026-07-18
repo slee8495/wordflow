@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { speak } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
+import { useUser } from "../UserProvider";
 
-const NAME_KEY = "wordflow:name";
 const LANG_KEY = "wordflow:lang";
 
 // Sequential magnitude color for the two headline meters (books touched, current book) — a
@@ -239,7 +239,7 @@ function BookGrid({
 }
 
 export default function ReadingPage() {
-  const [name, setName] = useState<string | null>(null);
+  const { name, login } = useUser();
   const [nameInput, setNameInput] = useState("");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [subTab, setSubTab] = useState<"browse" | "progress">("browse");
@@ -251,8 +251,6 @@ export default function ReadingPage() {
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setName(localStorage.getItem(NAME_KEY));
     const storedLang = localStorage.getItem(LANG_KEY);
     if (storedLang === "en" || storedLang === "ko") setContentLanguage(storedLang);
   }, []);
@@ -289,8 +287,7 @@ export default function ReadingPage() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!nameInput.trim()) return;
-          localStorage.setItem(NAME_KEY, nameInput.trim());
-          setName(nameInput.trim());
+          login(nameInput);
         }}
       >
         <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>

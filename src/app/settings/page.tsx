@@ -1,14 +1,60 @@
 "use client";
 
+import { useState } from "react";
 import { FONT_SCALES } from "@/lib/fontScale";
 import { useFontScale } from "../FontScaleProvider";
+import { useUser } from "../UserProvider";
 
 export default function SettingsPage() {
   const { scale, setScale } = useFontScale();
+  const { name, login, logout } = useUser();
+  const [nameInput, setNameInput] = useState("");
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-[var(--ink)]">Settings</h1>
+
+      <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
+        <h2 className="text-sm font-semibold text-[var(--ink-soft)]">Account</h2>
+        {name ? (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-[var(--ink)]">Logged in as <span className="font-medium">{name}</span></p>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)]"
+            >
+              Log out
+            </button>
+          </div>
+        ) : (
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!nameInput.trim()) return;
+              login(nameInput);
+              setNameInput("");
+            }}
+          >
+            <input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="Name"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-[var(--clay-deep)] px-3 py-1.5 text-sm font-medium text-[var(--paper-raised)]"
+            >
+              Log in
+            </button>
+          </form>
+        )}
+        <p className="text-sm text-[var(--ink-soft)]">
+          Your name is your login for now — it&apos;s how your reading progress is saved.
+        </p>
+      </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
         <h2 className="text-sm font-semibold text-[var(--ink-soft)]">Font Size</h2>
