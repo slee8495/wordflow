@@ -62,7 +62,7 @@ async function generateKoreanPassage(reference: string, englishText: string | nu
 // counterpart generated — same idea as generateKoreanPassage's "story" field, just English to
 // English: flow the same NLT wording into continuous prose with verse markers removed, no new
 // content invented.
-async function generateEnglishStoryPassage(reference: string, englishVersesText: string): Promise<string | null> {
+export async function generateEnglishStoryPassage(reference: string, englishVersesText: string): Promise<string | null> {
   const { text } = await generateText({
     model: MODEL,
     system:
