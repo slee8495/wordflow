@@ -230,8 +230,11 @@ export async function catchUpReading(profile: Profile, orderIndex: number, forDa
 }
 
 // Returns today's most recent reading if one already exists, otherwise generates the first one
-// for today. Idempotent for repeat calls with nothing new to do — safe for the nightly cron and
-// for /api/today to call on every page load without spamming generations.
+// for today. Idempotent for repeat calls with nothing new to do — safe for /api/today and the
+// chat assistant to call on every visit without spamming generations. This is the only place
+// the cursor advances on an ordinary day, and it only runs when a profile actually shows up —
+// there's no background job pre-generating it, so a day nobody visits doesn't silently consume
+// a cursor step; the next visit (whenever that is) picks up right where it left off.
 export async function generateDailyReading(profile: Profile) {
   const forDate = todayDateString();
 
@@ -255,7 +258,7 @@ export async function generateDailyReading(profile: Profile) {
 
 // User-triggered "read next" action: always generates a new reading for today and advances the
 // cursor, regardless of whether one already exists for today. Lets someone who finishes today's
-// reading keep going instead of waiting for tomorrow's cron.
+// reading keep going the same day instead of waiting until they next open the app.
 export async function generateNextReading(profile: Profile) {
   return buildReading(profile, todayDateString());
 }

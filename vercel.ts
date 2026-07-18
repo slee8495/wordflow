@@ -1,12 +1,10 @@
 import type { VercelConfig } from "@vercel/config/v1";
 
+// No crons: today's reading is generated lazily, the first time a profile actually opens the
+// app or asks the chat assistant about it (see generateDailyReading in src/lib/generateReading.ts).
+// A nightly cron used to pre-generate it for every profile regardless of whether they visited,
+// which silently advanced the curriculum cursor on days someone never opened the app — skipping
+// them past whatever they'd missed instead of picking back up where they left off.
 export const config: VercelConfig = {
   framework: "nextjs",
-  crons: [
-    // Runs daily at 13:00 UTC = ~6am Pacific (drifts ~1hr across DST) — generates today's
-    // reading for every profile before the day starts, so it's ready the first time they open
-    // the app. generateDailyReading is idempotent per (profile, date), so this is safe to
-    // re-run manually too.
-    { path: "/api/cron/generate-daily", schedule: "0 13 * * *" },
-  ],
 };

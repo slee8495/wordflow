@@ -52,10 +52,11 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// One generated reading per profile per generation. Regenerated fresh by the nightly cron even
-// if the underlying passage repeats on a later loop through the curriculum, so the commentary/
-// message isn't just replayed verbatim each cycle. No longer unique per (profileId, forDate) —
-// a profile can request more than one reading on the same calendar day via the "read next"
+// One generated reading per profile per generation, created lazily on that profile's first
+// visit of the day. Regenerated fresh each time even if the underlying passage repeats on a
+// later loop through the curriculum, so the commentary/message isn't just replayed verbatim
+// each cycle. No longer unique per (profileId, forDate) — a profile can request more than one
+// reading on the same calendar day via the "read next"
 // button, which always advances the cursor; /api/today shows the most recent one for today.
 export const readings = pgTable("readings", {
   id: serial("id").primaryKey(),

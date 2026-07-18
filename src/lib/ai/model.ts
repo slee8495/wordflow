@@ -1,8 +1,8 @@
 import { anthropic } from "@ai-sdk/anthropic";
 
-// Cheaper model for the nightly cron-driven daily content generation (theme/summary/background/
-// message — structured writing, doesn't need frontier reasoning). The interactive chat assistant
-// uses CHAT_MODEL instead, since that's on-demand/low-volume and benefits more from a stronger model.
+// Cheaper model for the lazily-generated daily content (theme/summary/background/message —
+// structured writing, doesn't need frontier reasoning). The interactive chat assistant uses
+// CHAT_MODEL instead, since that's on-demand/low-volume and benefits more from a stronger model.
 export const MODEL = "anthropic/claude-haiku-4.5";
 export const CHAT_MODEL = "anthropic/claude-sonnet-5";
 
