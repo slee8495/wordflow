@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { speak } from "@/lib/speak";
+import { pauseSpeaking, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { useUser } from "./UserProvider";
 
@@ -20,23 +20,30 @@ type Reading = {
   passageTextKoVerses: string | null;
   passageTextKoStory: string | null;
   passageTextEn: string | null;
+  passageTextEnStory: string | null;
   passageRef: string | null;
   worshipLinkKo: WorshipLink | null;
   worshipLinkEn: WorshipLink | null;
 };
+
+type SpeakState = "loading" | "playing" | "paused";
 
 function Section({
   title,
   subtitle,
   children,
   onSpeak,
-  speaking,
+  speakState,
+  onPauseToggle,
+  onStop,
 }: {
   title: string;
   subtitle?: string | null;
   children: React.ReactNode;
   onSpeak?: () => void;
-  speaking?: boolean;
+  speakState?: SpeakState | null;
+  onPauseToggle?: () => void;
+  onStop?: () => void;
 }) {
   return (
     <section className="rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-4 shadow-sm">
@@ -45,16 +52,26 @@ function Section({
           {title}
           {subtitle && <span className="ml-2 font-normal text-[var(--ink-soft)] opacity-70">{subtitle}</span>}
         </h2>
-        {onSpeak && (
-          <button
-            onClick={onSpeak}
-            disabled={speaking}
-            className="text-base disabled:opacity-50"
-            aria-label={`Listen to ${title}`}
-          >
-            {speaking ? "…" : "🔊"}
-          </button>
-        )}
+        {onSpeak &&
+          (!speakState ? (
+            <button onClick={onSpeak} className="text-base" aria-label={`Listen to ${title}`}>
+              🔊
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onPauseToggle}
+                disabled={speakState === "loading"}
+                className="text-base disabled:opacity-50"
+                aria-label={speakState === "paused" ? `Resume ${title}` : `Pause ${title}`}
+              >
+                {speakState === "loading" ? "…" : speakState === "paused" ? "▶️" : "⏸️"}
+              </button>
+              <button onClick={onStop} className="text-base" aria-label={`Stop ${title}`}>
+                ⏹️
+              </button>
+            </div>
+          ))}
       </div>
       {children}
     </section>
@@ -70,7 +87,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
-  const [speakingSection, setSpeakingSection] = useState<string | null>(null);
+  const [speakingSection, setSpeakingSection] = useState<{ id: string; state: SpeakState } | null>(null);
   const [generatingNext, setGeneratingNext] = useState(false);
 
   useEffect(() => {
@@ -105,9 +122,31 @@ export default function Home() {
 
   async function speakSection(id: string, text: string | null) {
     if (!text?.trim()) return;
-    setSpeakingSection(id);
-    await speak(text);
-    setSpeakingSection((current) => (current === id ? null : current));
+    setSpeakingSection({ id, state: "loading" });
+    await speak(text, {
+      onPlaybackStart: () => setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current)),
+    });
+    setSpeakingSection((current) => (current?.id === id ? null : current));
+  }
+
+  function togglePauseSection(id: string) {
+    setSpeakingSection((current) => {
+      if (!current || current.id !== id) return current;
+      if (current.state === "playing") {
+        pauseSpeaking();
+        return { id, state: "paused" };
+      }
+      if (current.state === "paused") {
+        resumeSpeaking();
+        return { id, state: "playing" };
+      }
+      return current;
+    });
+  }
+
+  function stopSection(id: string) {
+    stopSpeaking();
+    setSpeakingSection((current) => (current?.id === id ? null : current));
   }
 
   async function readNext() {
@@ -172,7 +211,9 @@ export default function Home() {
 
   const passageText =
     contentLanguage === "en"
-      ? reading?.passageTextEn
+      ? ((passageView === "story" ? reading?.passageTextEnStory : reading?.passageTextEn) ??
+        reading?.passageTextEnStory ??
+        reading?.passageTextEn)
       : ((passageView === "story" ? reading?.passageTextKoStory : reading?.passageTextKoVerses) ??
         reading?.passageTextKoStory ??
         reading?.passageTextKoVerses);
@@ -262,32 +303,32 @@ export default function Home() {
               title="Today's Passage"
               subtitle={rangeLabel}
               onSpeak={() => speakSection("passage", passageText ?? null)}
-              speaking={speakingSection === "passage"}
+              speakState={speakingSection?.id === "passage" ? speakingSection.state : null}
+              onPauseToggle={() => togglePauseSection("passage")}
+              onStop={() => stopSection("passage")}
             >
-              {contentLanguage === "ko" && (
-                <div className="mb-2 flex gap-1.5">
-                  <button
-                    onClick={() => setPassageView("verses")}
-                    className={`rounded-full px-2.5 py-1 text-xs ${
-                      passageView === "verses"
-                        ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
-                        : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
-                    }`}
-                  >
-                    By Verse
-                  </button>
-                  <button
-                    onClick={() => setPassageView("story")}
-                    className={`rounded-full px-2.5 py-1 text-xs ${
-                      passageView === "story"
-                        ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
-                        : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
-                    }`}
-                  >
-                    As a Story
-                  </button>
-                </div>
-              )}
+              <div className="mb-2 flex gap-1.5">
+                <button
+                  onClick={() => setPassageView("verses")}
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    passageView === "verses"
+                      ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
+                      : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
+                  }`}
+                >
+                  By Verse
+                </button>
+                <button
+                  onClick={() => setPassageView("story")}
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    passageView === "story"
+                      ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
+                      : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
+                  }`}
+                >
+                  As a Story
+                </button>
+              </div>
               <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
                 {contentLanguage === "en"
@@ -300,7 +341,9 @@ export default function Home() {
           <Section
             title="Today's Story"
             onSpeak={() => speakSection("story", pick(reading.storySummaryEn, reading.storySummary))}
-            speaking={speakingSection === "story"}
+            speakState={speakingSection?.id === "story" ? speakingSection.state : null}
+            onPauseToggle={() => togglePauseSection("story")}
+            onStop={() => stopSection("story")}
           >
             <p className="text-sm leading-relaxed whitespace-pre-line">
               {pick(reading.storySummaryEn, reading.storySummary)}
@@ -310,7 +353,9 @@ export default function Home() {
           <Section
             title="Context & Background"
             onSpeak={() => speakSection("context", pick(reading.historicalContextEn, reading.historicalContext))}
-            speaking={speakingSection === "context"}
+            speakState={speakingSection?.id === "context" ? speakingSection.state : null}
+            onPauseToggle={() => togglePauseSection("context")}
+            onStop={() => stopSection("context")}
           >
             <p className="text-sm leading-relaxed whitespace-pre-line">
               {pick(reading.historicalContextEn, reading.historicalContext)}
@@ -320,7 +365,9 @@ export default function Home() {
           <Section
             title="Today's Message"
             onSpeak={() => speakSection("message", pick(reading.personalMessageEn, reading.personalMessage))}
-            speaking={speakingSection === "message"}
+            speakState={speakingSection?.id === "message" ? speakingSection.state : null}
+            onPauseToggle={() => togglePauseSection("message")}
+            onStop={() => stopSection("message")}
           >
             <p className="text-sm leading-relaxed whitespace-pre-line">
               {pick(reading.personalMessageEn, reading.personalMessage)}

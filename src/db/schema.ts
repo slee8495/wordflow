@@ -83,7 +83,12 @@ export const readings = pgTable("readings", {
   // kept in both a verse-numbered form and a continuous-story form so the UI can offer either.
   passageTextKoVerses: text("passage_text_ko_verses"),
   passageTextKoStory: text("passage_text_ko_story"),
+  // English verse-numbered text comes straight from the NLT API. passageTextEnStory is a
+  // Claude-rendered continuous-prose rendition of that same NLT text (no new content, just
+  // verse markers removed and flowed into prose) so the English side offers the same
+  // by-verse/story toggle as Korean. Null on rows generated before this field existed.
   passageTextEn: text("passage_text_en"),
+  passageTextEnStory: text("passage_text_en_story"),
 
   // One worship pick per language, not a mixed list — the UI only ever shows the pick that
   // matches the active content-language toggle.

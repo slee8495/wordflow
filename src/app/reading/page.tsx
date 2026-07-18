@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { speak } from "@/lib/speak";
+import { pauseSpeaking, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
 import { useUser } from "../UserProvider";
@@ -248,7 +248,33 @@ export default function ReadingPage() {
   const [passageText, setPassageText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [speaking, setSpeaking] = useState(false);
+  const [speakState, setSpeakState] = useState<"loading" | "playing" | "paused" | null>(null);
+
+  async function speakPassage() {
+    if (!passageText?.trim()) return;
+    setSpeakState("loading");
+    await speak(passageText, { onPlaybackStart: () => setSpeakState((cur) => (cur ? "playing" : cur)) });
+    setSpeakState(null);
+  }
+
+  function togglePausePassage() {
+    setSpeakState((cur) => {
+      if (cur === "playing") {
+        pauseSpeaking();
+        return "paused";
+      }
+      if (cur === "paused") {
+        resumeSpeaking();
+        return "playing";
+      }
+      return cur;
+    });
+  }
+
+  function stopPassage() {
+    stopSpeaking();
+    setSpeakState(null);
+  }
 
   useEffect(() => {
     const storedLang = localStorage.getItem(LANG_KEY);
@@ -401,20 +427,30 @@ export default function ReadingPage() {
               <h2 className="text-sm font-semibold text-[var(--ink-soft)]">
                 {selectedBook} {selectedChapter}
               </h2>
-              {passageText && (
-                <button
-                  onClick={async () => {
-                    setSpeaking(true);
-                    await speak(passageText);
-                    setSpeaking(false);
-                  }}
-                  disabled={speaking}
-                  className="text-base disabled:opacity-50"
-                  aria-label={`Listen to ${selectedBook} ${selectedChapter}`}
-                >
-                  {speaking ? "…" : "🔊"}
-                </button>
-              )}
+              {passageText &&
+                (!speakState ? (
+                  <button
+                    onClick={speakPassage}
+                    className="text-base"
+                    aria-label={`Listen to ${selectedBook} ${selectedChapter}`}
+                  >
+                    🔊
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={togglePausePassage}
+                      disabled={speakState === "loading"}
+                      className="text-base disabled:opacity-50"
+                      aria-label={speakState === "paused" ? "Resume" : "Pause"}
+                    >
+                      {speakState === "loading" ? "…" : speakState === "paused" ? "▶️" : "⏸️"}
+                    </button>
+                    <button onClick={stopPassage} className="text-base" aria-label="Stop">
+                      ⏹️
+                    </button>
+                  </div>
+                ))}
             </div>
             {loading && <p className="text-sm text-[var(--ink-soft)]">Loading…</p>}
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

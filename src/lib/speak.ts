@@ -14,6 +14,9 @@
 const audioUrlCache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string | null>>();
 let currentAudio: HTMLAudioElement | null = null;
+// Resolver for the playAudio() promise currently in flight, if any — stopSpeaking() uses this to
+// unblock a hung await immediately (see the comment on playAudio for why that's necessary).
+let currentStopResolve: ((finished: boolean) => void) | null = null;
 let playToken = 0;
 
 const MAX_CHUNK_LENGTH = 200;
@@ -34,21 +37,47 @@ function splitIntoChunks(text: string): string[] {
   return chunks;
 }
 
-function speakWithBrowserVoice(text: string) {
+function speakWithBrowserVoice(text: string, onStart?: () => void) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.95;
+  if (onStart) utterance.onstart = onStart;
   window.speechSynthesis.speak(utterance);
 }
 
+// A hard stop: abandons whatever's currently playing/loading and unblocks speak()'s awaited
+// playAudio() promise (see playAudio) so a caller's `await speak(...)` reliably returns instead
+// of hanging forever on a clip that's paused-but-never-ending. Bumping playToken makes the
+// unblocked loop iteration take the `token !== playToken` exit instead of falling through to the
+// "did it finish cleanly" fallback check.
 export function stopSpeaking() {
+  playToken++;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
   }
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
+  }
+  currentStopResolve?.(false);
+  currentStopResolve = null;
+}
+
+// A soft pause: unlike stopSpeaking(), deliberately does NOT resolve the in-flight playAudio()
+// promise or touch playToken — the sequence should stay suspended on the current clip and pick
+// back up via resumeSpeaking(), not jump to the next chunk or fall back to the browser voice.
+export function pauseSpeaking() {
+  currentAudio?.pause();
+  if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+    window.speechSynthesis.pause();
+  }
+}
+
+export function resumeSpeaking() {
+  currentAudio?.play().catch(() => {});
+  if (typeof window !== "undefined" && window.speechSynthesis?.paused) {
+    window.speechSynthesis.resume();
   }
 }
 
@@ -78,18 +107,23 @@ function fetchAudioUrl(text: string): Promise<string | null> {
 
 // Plays one clip and resolves once it *actually* finishes (or errors). Deliberately does NOT
 // treat a bare "pause" event as completion — a pause can fire for reasons that have nothing to
-// do with the clip being done (OS media-session interruptions, tab backgrounding, screen lock),
-// and treating those as "finished" was making playback silently skip ahead or stop partway
-// through a reply. A superseded call's stopSpeaking() pause is instead handled by the caller's
-// playToken check: the promise just never resolves for a paused-but-not-ended clip, which is
-// fine since nothing awaits it further once the sequence has moved on.
-function playAudio(url: string): Promise<boolean> {
+// do with the clip being done (OS media-session interruptions, tab backgrounding, screen lock,
+// or a user-initiated pauseSpeaking()), and treating those as "finished" was making playback
+// silently skip ahead or stop partway through a reply. Instead the promise just sits until
+// either the clip actually ends/errors, or stopSpeaking() forces it via currentStopResolve.
+function playAudio(url: string, onStart?: () => void): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     currentAudio = audio;
-    audio.addEventListener("ended", () => resolve(true), { once: true });
-    audio.addEventListener("error", () => resolve(false), { once: true });
-    audio.play().catch(() => resolve(false));
+    currentStopResolve = resolve;
+    const settle = (finished: boolean) => {
+      currentStopResolve = null;
+      resolve(finished);
+    };
+    audio.addEventListener("playing", () => onStart?.(), { once: true });
+    audio.addEventListener("ended", () => settle(true), { once: true });
+    audio.addEventListener("error", () => settle(false), { once: true });
+    audio.play().catch(() => settle(false));
   });
 }
 
@@ -101,28 +135,36 @@ export function prefetchSpeech(text: string) {
   }
 }
 
-export async function speak(text: string) {
+export async function speak(text: string, opts: { onPlaybackStart?: () => void } = {}) {
   if (!text.trim()) return;
-  const token = ++playToken;
-  stopSpeaking();
+  stopSpeaking(); // also bumps playToken, so capture `token` only after this
+  const token = playToken;
 
   const chunks = splitIntoChunks(text);
   // Kick off every chunk's fetch immediately so later ones generate while earlier ones play.
   const urlPromises = chunks.map((chunk) => fetchAudioUrl(chunk));
+  // Only the very first chunk's playback start should notify the caller — later chunks continue
+  // the same "playing" session seamlessly.
+  let announced = false;
+  const announceStart = () => {
+    if (announced) return;
+    announced = true;
+    opts.onPlaybackStart?.();
+  };
 
   for (let i = 0; i < urlPromises.length; i++) {
-    if (token !== playToken) return; // a newer speak() call superseded this one
+    if (token !== playToken) return; // a newer speak() call, or an explicit stop, superseded this one
     const url = await urlPromises[i];
     if (token !== playToken) return;
 
     if (!url) {
-      speakWithBrowserVoice(chunks.slice(i).join(" "));
+      speakWithBrowserVoice(chunks.slice(i).join(" "), announceStart);
       return;
     }
-    const finishedCleanly = await playAudio(url);
+    const finishedCleanly = await playAudio(url, announceStart);
     if (token !== playToken) return;
     if (!finishedCleanly) {
-      speakWithBrowserVoice(chunks.slice(i + 1).join(" "));
+      speakWithBrowserVoice(chunks.slice(i + 1).join(" "), announceStart);
       return;
     }
   }

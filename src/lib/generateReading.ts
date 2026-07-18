@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -58,10 +58,30 @@ async function generateKoreanPassage(reference: string, englishText: string | nu
   return object;
 }
 
+// The NLT API text is already verse-numbered ("by verse"), so English only needs a story-mode
+// counterpart generated — same idea as generateKoreanPassage's "story" field, just English to
+// English: flow the same NLT wording into continuous prose with verse markers removed, no new
+// content invented.
+async function generateEnglishStoryPassage(reference: string, englishVersesText: string): Promise<string | null> {
+  const { text } = await generateText({
+    model: MODEL,
+    system:
+      "You render Bible passages as smooth, continuous story-style prose in English. Preserve the given " +
+      "NLT wording and meaning as closely as possible — don't add or omit content, just remove verse-number " +
+      "markers and join the text into one natural flowing narrative with no verse breaks. Output only the " +
+      "passage text, no preamble.",
+    prompt: `Passage: ${reference}\n\nNLT text (verse-numbered):\n${englishVersesText}`,
+  });
+  return text.trim();
+}
+
 async function fetchPassageTexts(passageRef: string) {
   const en = await fetchNltPassage(passageRef).catch(() => null);
-  const ko = await generateKoreanPassage(passageRef, en).catch(() => null);
-  return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en };
+  const [ko, enStory] = await Promise.all([
+    generateKoreanPassage(passageRef, en).catch(() => null),
+    en ? generateEnglishStoryPassage(passageRef, en).catch(() => null) : Promise.resolve(null),
+  ]);
+  return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en, enStory };
 }
 
 // Generates and inserts a reading for a specific curriculum item — the shared content-generation
@@ -73,7 +93,7 @@ async function buildReadingForItem(
   item: CurriculumItem,
   createdAt?: Date,
 ) {
-  const { koVerses, koStory, en } = await fetchPassageTexts(item.passageRef);
+  const { koVerses, koStory, en, enStory } = await fetchPassageTexts(item.passageRef);
 
   const { object } = await generateObject({
     model: MODEL,
@@ -114,6 +134,7 @@ async function buildReadingForItem(
       passageTextKoVerses: koVerses,
       passageTextKoStory: koStory,
       passageTextEn: en,
+      passageTextEnStory: enStory,
       worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
       worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
       ...(createdAt ? { createdAt } : {}),

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { prefetchSpeech, speak } from "@/lib/speak";
+import { pauseSpeaking, prefetchSpeech, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
 import { useUser } from "./UserProvider";
 
 function messageText(message: UIMessage): string {
@@ -28,10 +28,42 @@ export function ChatWidget() {
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [loadingSpeakId, setLoadingSpeakId] = useState<string | null>(null);
+  const [speakingMessage, setSpeakingMessage] = useState<{
+    id: string;
+    state: "loading" | "playing" | "paused";
+  } | null>(null);
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
+
+  async function speakMessage(id: string, text: string) {
+    if (!text.trim()) return;
+    setSpeakingMessage({ id, state: "loading" });
+    await speak(text, {
+      onPlaybackStart: () => setSpeakingMessage((cur) => (cur?.id === id ? { id, state: "playing" } : cur)),
+    });
+    setSpeakingMessage((cur) => (cur?.id === id ? null : cur));
+  }
+
+  function togglePauseMessage(id: string) {
+    setSpeakingMessage((cur) => {
+      if (!cur || cur.id !== id) return cur;
+      if (cur.state === "playing") {
+        pauseSpeaking();
+        return { id, state: "paused" };
+      }
+      if (cur.state === "paused") {
+        resumeSpeaking();
+        return { id, state: "playing" };
+      }
+      return cur;
+    });
+  }
+
+  function stopMessage(id: string) {
+    stopSpeaking();
+    setSpeakingMessage((cur) => (cur?.id === id ? null : cur));
+  }
 
   const handledReplyIds = useRef(new Set<string>());
   useEffect(() => {
@@ -42,7 +74,8 @@ export function ChatWidget() {
     if (!text) return;
     handledReplyIds.current.add(last.id);
     if (autoSpeak) {
-      speak(text);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      speakMessage(last.id, text);
     } else {
       prefetchSpeech(text);
     }
@@ -141,21 +174,42 @@ export function ChatWidget() {
                       part.type === "text" ? <span key={i}>{part.text}</span> : null,
                     )}
                   </div>
-                  {message.role === "assistant" && messageText(message) && (
-                    <button
-                      onClick={async () => {
-                        setLoadingSpeakId(message.id);
-                        await speak(messageText(message));
-                        setLoadingSpeakId((id) => (id === message.id ? null : id));
-                      }}
-                      disabled={loadingSpeakId === message.id}
-                      aria-label="이 답변 읽어주기"
-                      title="읽어주기"
-                      className="ml-1 align-middle text-xs text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-50"
-                    >
-                      {loadingSpeakId === message.id ? "…" : "🔊"}
-                    </button>
-                  )}
+                  {message.role === "assistant" &&
+                    messageText(message) &&
+                    (speakingMessage?.id !== message.id ? (
+                      <button
+                        onClick={() => speakMessage(message.id, messageText(message))}
+                        aria-label="이 답변 읽어주기"
+                        title="읽어주기"
+                        className="ml-1 align-middle text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                      >
+                        🔊
+                      </button>
+                    ) : (
+                      <span className="ml-1 inline-flex items-center gap-2 align-middle">
+                        <button
+                          onClick={() => togglePauseMessage(message.id)}
+                          disabled={speakingMessage.state === "loading"}
+                          aria-label={speakingMessage.state === "paused" ? "이어 듣기" : "일시정지"}
+                          title={speakingMessage.state === "paused" ? "이어 듣기" : "일시정지"}
+                          className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-50"
+                        >
+                          {speakingMessage.state === "loading"
+                            ? "…"
+                            : speakingMessage.state === "paused"
+                              ? "▶️"
+                              : "⏸️"}
+                        </button>
+                        <button
+                          onClick={() => stopMessage(message.id)}
+                          aria-label="그만 듣기"
+                          title="그만 듣기"
+                          className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                        >
+                          ⏹️
+                        </button>
+                      </span>
+                    ))}
                 </div>
               ))}
               {status === "submitted" && <div className="text-sm text-[var(--ink-soft)]">생각 중…</div>}
