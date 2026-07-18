@@ -34,10 +34,6 @@ export type ProgressPayload = {
   activityCount: number; // readings + deep-reading-log rows, scoped the same as everything else
 };
 
-function daysAgoDateString(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 // Every chapter a profile has touched, per book — from daily readings (whose curriculum
 // passageRef may span several chapters, e.g. "Genesis 6:5-7:16" touches both 6 and 7) and from
 // the deep-reading tab's explicit per-chapter log. `since`, when given, scopes this to activity
@@ -130,7 +126,7 @@ export async function getReadingProgress(profile: Profile, scope: ProgressScope)
   // Trailing pace for the completion projection — always a fixed 14-day window regardless of
   // `scope`. Stays curriculum-entry-based: it's projecting when the CURRICULUM LOOP finishes,
   // not Bible chapter coverage.
-  const paceSince = daysAgoDateString(TRAILING_PACE_DAYS);
+  const paceSince = pacificDateString(-TRAILING_PACE_DAYS);
   const [readingPace] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(readings)
