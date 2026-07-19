@@ -358,6 +358,23 @@ export default function Home() {
             <h1 className="text-lg font-semibold">{pick(reading.themeEn, reading.theme)}</h1>
           </div>
 
+          <Section
+            title={t("today.contextTitle")}
+            onSpeak={() => speakSection("context", pick(reading.historicalContextEn, reading.historicalContext))}
+            speakState={speakingSection?.id === "context" ? speakingSection.state : null}
+            onPauseToggle={() => togglePauseSection("context")}
+            onStop={() => stopSection("context")}
+          >
+            <HighlightedText
+              text={pick(reading.historicalContextEn, reading.historicalContext)}
+              isActiveSection={speakingSection?.id === "context"}
+              activeChunkIndex={activeChunkIndex}
+              onSentenceClick={(i) =>
+                speakSection("context", pick(reading.historicalContextEn, reading.historicalContext), i)
+              }
+            />
+          </Section>
+
           {(reading.passageTextKoVerses || reading.passageTextKoStory || reading.passageTextEn) && (
             <Section
               title={t("today.passageTitle")}
@@ -406,38 +423,6 @@ export default function Home() {
               </p>
             </Section>
           )}
-
-          <Section
-            title={t("today.storyTitle")}
-            onSpeak={() => speakSection("story", pick(reading.storySummaryEn, reading.storySummary))}
-            speakState={speakingSection?.id === "story" ? speakingSection.state : null}
-            onPauseToggle={() => togglePauseSection("story")}
-            onStop={() => stopSection("story")}
-          >
-            <HighlightedText
-              text={pick(reading.storySummaryEn, reading.storySummary)}
-              isActiveSection={speakingSection?.id === "story"}
-              activeChunkIndex={activeChunkIndex}
-              onSentenceClick={(i) => speakSection("story", pick(reading.storySummaryEn, reading.storySummary), i)}
-            />
-          </Section>
-
-          <Section
-            title={t("today.contextTitle")}
-            onSpeak={() => speakSection("context", pick(reading.historicalContextEn, reading.historicalContext))}
-            speakState={speakingSection?.id === "context" ? speakingSection.state : null}
-            onPauseToggle={() => togglePauseSection("context")}
-            onStop={() => stopSection("context")}
-          >
-            <HighlightedText
-              text={pick(reading.historicalContextEn, reading.historicalContext)}
-              isActiveSection={speakingSection?.id === "context"}
-              activeChunkIndex={activeChunkIndex}
-              onSentenceClick={(i) =>
-                speakSection("context", pick(reading.historicalContextEn, reading.historicalContext), i)
-              }
-            />
-          </Section>
 
           <Section
             title={t("today.messageTitle")}

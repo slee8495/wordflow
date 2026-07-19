@@ -24,7 +24,6 @@ const STRINGS = {
   "today.previousPassage": { ko: "이전 본문", en: "Previous passage" },
   "today.nextPassage": { ko: "다음 본문", en: "Next passage" },
   "today.passageTitle": { ko: "오늘의 본문", en: "Today's Passage" },
-  "today.storyTitle": { ko: "오늘의 이야기", en: "Today's Story" },
   "today.contextTitle": { ko: "배경 설명", en: "Context & Background" },
   "today.messageTitle": { ko: "오늘의 메시지", en: "Today's Message" },
   "today.worshipTitle": { ko: "찬양", en: "Worship" },

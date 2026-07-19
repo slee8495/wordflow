@@ -88,11 +88,13 @@ const EXCLUDE_TERMS = [
 ];
 
 // Positive signal that a result is actually a song, not just uncategorized/mislabeled spoken
-// content. Korean worship uploads reliably self-label with one of these, so it's required there
-// as a fallback when the channel isn't already established by subscriber count. English worship
-// songs are usually just titled with the song/artist name with no "worship"/"praise" in sight
-// (e.g. "Perfect Wisdom of Our God" by Keith & Kristyn Getty) — requiring the term there rejected
-// real matches far more often than it caught bad ones, so English keeps a best-effort fallback.
+// content — used as a fallback when the channel isn't already established by subscriber count.
+// Both languages require one of these (or an established channel) rather than blindly falling
+// back to the first non-excluded hit: the subscriber-count check above already recognizes big
+// artists/channels that don't literally say "worship" in the title (e.g. Keith & Kristyn Getty),
+// so requiring a positive signal no longer costs real matches the way it did before that check
+// existed — it only used to cut Korean and English differently because Korean channels reliably
+// self-label with 워십/찬양/etc. and English channels mostly don't.
 const WORSHIP_POSITIVE_TERMS_KO = ["워십", "찬양", "예배", "찬미", "찬송", "worship"];
 const WORSHIP_POSITIVE_TERMS_EN = ["worship", "praise"];
 
@@ -136,6 +138,6 @@ export async function searchWorshipSongs(
 
   return {
     ko: pickWorship(koResults, WORSHIP_POSITIVE_TERMS_KO, subscriberCounts, { requirePositiveMatch: true }),
-    en: pickWorship(enResults, WORSHIP_POSITIVE_TERMS_EN, subscriberCounts, { requirePositiveMatch: false }),
+    en: pickWorship(enResults, WORSHIP_POSITIVE_TERMS_EN, subscriberCounts, { requirePositiveMatch: true }),
   };
 }
