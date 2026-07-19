@@ -1,6 +1,6 @@
 // Auto-matches a worship song to today's theme via YouTube Data API v3 search — no hand-curated
 // video list to maintain, at the cost of occasional off-target results.
-export type YoutubeResult = { title: string; channelTitle: string; url: string };
+export type YoutubeResult = { title: string; channelTitle: string; channelId: string; url: string };
 
 async function searchYoutube(
   query: string,
@@ -22,24 +22,42 @@ async function searchYoutube(
   if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
   const { items } = await res.json();
 
-  return (items ?? []).map((item: { id: { videoId: string }; snippet: { title: string; channelTitle: string } }) => ({
-    title: item.snippet.title,
-    channelTitle: item.snippet.channelTitle,
-    url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-  }));
+  return (items ?? []).map(
+    (item: { id: { videoId: string }; snippet: { title: string; channelTitle: string; channelId: string } }) => ({
+      title: item.snippet.title,
+      channelTitle: item.snippet.channelTitle,
+      channelId: item.snippet.channelId,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+    }),
+  );
 }
 
-// Best-effort substring match on channelTitle — no verified channel IDs on hand, so this is
-// a name allowlist rather than an exact channelId filter. Extend as specific channels prove
-// reliable; a hardcoded channelId filter would be more precise once we have real IDs.
-const KOREAN_WORSHIP_CHANNELS = ["예수전도단", "YWAM Worship Korea"];
-const ENGLISH_WORSHIP_CHANNELS = [
-  "Bethel Music",
-  "Elevation Worship",
-  "Hillsong Worship",
-  "Housefires",
-  "Maverick City Music",
-];
+// Channel subscriber counts, batched into a single API call — used as a dynamic stand-in for "is
+// this a real, established worship ministry" instead of a hand-maintained channel-name allowlist,
+// which can only ever recognize teams we already knew about the day it was written. A brand-new
+// but genuinely popular team clears the bar automatically; a random small upload doesn't.
+async function getSubscriberCounts(channelIds: string[]): Promise<Map<string, number>> {
+  const key = process.env.YOUTUBE_API_KEY;
+  const unique = [...new Set(channelIds)].filter(Boolean);
+  if (!key || unique.length === 0) return new Map();
+
+  const params = new URLSearchParams({ part: "statistics", id: unique.join(","), key });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?${params}`);
+  if (!res.ok) return new Map();
+  const { items } = await res.json();
+
+  const counts = new Map<string, number>();
+  for (const item of items ?? []) {
+    const count = Number(item?.statistics?.subscriberCount ?? 0);
+    if (item?.id) counts.set(item.id, count);
+  }
+  return counts;
+}
+
+// Subscriber floor for treating a channel as an established worship ministry rather than an
+// unknown/small upload. Tunable — higher trades away more borderline-legitimate hits for fewer
+// false positives.
+const ESTABLISHED_SUBSCRIBER_THRESHOLD = 50_000;
 
 // The videoCategoryId filter (below) restricts to actual music content, but keyword search can
 // still surface clergy talks/liturgy/scripture-reading channels that happen to match on title
@@ -71,24 +89,24 @@ const EXCLUDE_TERMS = [
 
 // Positive signal that a result is actually a song, not just uncategorized/mislabeled spoken
 // content. Korean worship uploads reliably self-label with one of these, so it's required there
-// (falling through to null rather than guessing). English worship songs are usually just titled
-// with the song/artist name with no "worship"/"praise" in sight (e.g. "Perfect Wisdom of Our
-// God" by Keith & Kristyn Getty) — requiring the term there rejected real matches far more often
-// than it caught bad ones, so English keeps the old best-effort fallback instead.
+// as a fallback when the channel isn't already established by subscriber count. English worship
+// songs are usually just titled with the song/artist name with no "worship"/"praise" in sight
+// (e.g. "Perfect Wisdom of Our God" by Keith & Kristyn Getty) — requiring the term there rejected
+// real matches far more often than it caught bad ones, so English keeps a best-effort fallback.
 const WORSHIP_POSITIVE_TERMS_KO = ["워십", "찬양", "예배", "찬미", "찬송", "worship"];
 const WORSHIP_POSITIVE_TERMS_EN = ["worship", "praise"];
 
 function pickWorship(
   results: YoutubeResult[],
-  allowlist: string[],
   positiveTerms: string[],
+  subscriberCounts: Map<string, number>,
   { requirePositiveMatch }: { requirePositiveMatch: boolean },
 ): YoutubeResult | null {
   const safe = results.filter(
     (r) => !EXCLUDE_TERMS.some((term) => r.title.toLowerCase().includes(term) || r.channelTitle.toLowerCase().includes(term)),
   );
-  const allowlisted = safe.find((r) => allowlist.some((name) => r.channelTitle.includes(name)));
-  if (allowlisted) return allowlisted;
+  const established = safe.find((r) => (subscriberCounts.get(r.channelId) ?? 0) >= ESTABLISHED_SUBSCRIBER_THRESHOLD);
+  if (established) return established;
   const positiveMatch = safe.find((r) =>
     positiveTerms.some(
       (term) => r.title.toLowerCase().includes(term.toLowerCase()) || r.channelTitle.toLowerCase().includes(term.toLowerCase()),
@@ -110,8 +128,14 @@ export async function searchWorshipSongs(
     searchYoutube(`찬양 ${themeKo}`, 8, { videoDuration: "medium", videoCategoryId: "10" }),
     searchYoutube(`worship ${themeEn}`, 8, { videoDuration: "medium", videoCategoryId: "10" }),
   ]);
+
+  const subscriberCounts = await getSubscriberCounts([
+    ...koResults.map((r) => r.channelId),
+    ...enResults.map((r) => r.channelId),
+  ]).catch(() => new Map<string, number>());
+
   return {
-    ko: pickWorship(koResults, KOREAN_WORSHIP_CHANNELS, WORSHIP_POSITIVE_TERMS_KO, { requirePositiveMatch: true }),
-    en: pickWorship(enResults, ENGLISH_WORSHIP_CHANNELS, WORSHIP_POSITIVE_TERMS_EN, { requirePositiveMatch: false }),
+    ko: pickWorship(koResults, WORSHIP_POSITIVE_TERMS_KO, subscriberCounts, { requirePositiveMatch: true }),
+    en: pickWorship(enResults, WORSHIP_POSITIVE_TERMS_EN, subscriberCounts, { requirePositiveMatch: false }),
   };
 }
