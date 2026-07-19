@@ -50,6 +50,33 @@ export const profiles = pgTable("profiles", {
   // instead of only offering lifetime-cumulative numbers.
   currentCycleStartedAt: timestamp("current_cycle_started_at", { withTimezone: true }),
   lastReadDate: date("last_read_date"),
+  // Synced from the client's UI-language setting (src/app/UiLanguageProvider.tsx) so server-side
+  // code that has no request/session to read localStorage from — namely the morning-reminder
+  // cron — can still compose the notification in the right language. Null until the client's
+  // sync effect has run at least once; treat as the app's default UI language until then.
+  uiLang: varchar("ui_lang", { length: 8 }),
+  // Whether the 5am "today's reading is ready" push notification is turned on. Kept in sync with
+  // whether any row exists in pushSubscriptions for this profile — true only once at least one
+  // subscription has been saved, false again once the last one is removed.
+  notificationsEnabled: boolean("notifications_enabled").default(false).notNull(),
+  // Guards the cron against sending more than once per calendar day per profile — see
+  // src/app/api/notifications/cron/route.ts. Pacific-time date string, same convention as
+  // lastReadDate/forDate elsewhere.
+  lastNotifiedDate: date("last_notified_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// One row per subscribed browser/device for the morning reminder push notification. A profile
+// can have several (phone + laptop, etc). Deleted individually when that device unsubscribes, or
+// automatically by the cron if the push service reports the subscription as gone (410/404).
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -142,3 +169,4 @@ export const bibleTextCache = pgTable(
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
 export type Reading = typeof readings.$inferSelect;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

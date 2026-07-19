@@ -4,6 +4,7 @@ import { AppNav } from "./AppNav";
 import { FontScaleProvider } from "./FontScaleProvider";
 import { NowPlayingBar } from "./NowPlayingBar";
 import { PlaybackProvider } from "./PlaybackProvider";
+import { UiLangSync } from "./UiLangSync";
 import { UiLanguageProvider } from "./UiLanguageProvider";
 import { UserProvider } from "./UserProvider";
 import { SettingsLink } from "./SettingsLink";
@@ -83,6 +84,7 @@ export default function RootLayout({
                   {children}
                 </main>
                 <NowPlayingBar />
+                <UiLangSync />
               </UserProvider>
             </PlaybackProvider>
           </UiLanguageProvider>

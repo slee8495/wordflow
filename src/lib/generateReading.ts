@@ -372,3 +372,42 @@ export async function findOrCreateProfile(name: string): Promise<Profile> {
   const [created] = await db.insert(profiles).values({ name }).returning();
   return created;
 }
+
+// Read-only: reports which curriculum item a profile's cursor is CURRENTLY sitting on, without
+// generating a reading or advancing anything. Mirrors buildReading/buildFirstReadingOfDay's own
+// season-then-rotation lookup so the answer always matches what actually shows up if the profile
+// opens the app right now — but must NEVER call buildReading/generateDailyReading itself, since
+// this is used by the morning-reminder cron and calling either of those on a schedule is exactly
+// the bug that removing the old nightly cron fixed (see vercel.ts): it would silently consume a
+// curriculum step for every profile whether or not they actually visited that day.
+export async function peekCurrentCurriculumItem(profile: Profile): Promise<CurriculumItem | null> {
+  const activeSeason = getActiveSeason(pacificDateString());
+  if (activeSeason) {
+    const [seasonItem] = await db
+      .select()
+      .from(curriculumItems)
+      .where(
+        and(
+          eq(curriculumItems.season, activeSeason.season),
+          eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
+        ),
+      )
+      .limit(1);
+    if (seasonItem) return seasonItem;
+  }
+
+  const [total] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(curriculumItems)
+    .where(isNull(curriculumItems.season));
+  const curriculumLength = Number(total?.count ?? 0);
+  if (curriculumLength === 0) return null;
+
+  const position = profile.cursorPosition % curriculumLength;
+  const [item] = await db
+    .select()
+    .from(curriculumItems)
+    .where(and(eq(curriculumItems.orderIndex, position), isNull(curriculumItems.season)))
+    .limit(1);
+  return item ?? null;
+}

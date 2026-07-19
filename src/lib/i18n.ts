@@ -49,6 +49,19 @@ const STRINGS = {
     ko: "앱의 메뉴와 버튼 문구 언어예요. 성경 본문 언어는 각 화면에서 따로 선택해요.",
     en: "Changes the app's menus and labels. Bible passage language is chosen separately on each page.",
   },
+  "settings.morningReminder": { ko: "아침 알림", en: "Morning Reminder" },
+  "settings.morningReminderHint": {
+    ko: "매일 아침 5시(태평양시간)에 오늘 읽을 본문 범위를 알려드려요.",
+    en: "Every morning at 5am (Pacific time), get a notification with today's passage range.",
+  },
+  "settings.notificationsUnsupported": {
+    ko: "이 브라우저에서는 알림을 지원하지 않아요.",
+    en: "Notifications aren't supported in this browser.",
+  },
+  "settings.notificationsDenied": {
+    ko: "알림 권한이 차단돼 있어요. 브라우저 설정에서 허용해주세요.",
+    en: "Notification permission is blocked. Please allow it in your browser settings.",
+  },
   "settings.fontScale.small": { ko: "작게", en: "Small" },
   "settings.fontScale.default": { ko: "기본", en: "Default" },
   "settings.fontScale.large": { ko: "크게", en: "Large" },

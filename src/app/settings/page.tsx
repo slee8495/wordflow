@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FONT_SCALES } from "@/lib/fontScale";
-import { fontScaleLabelKey, loggedInAs } from "@/lib/i18n";
+import { fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
+import { disableNotifications, enableNotifications, pushSupported } from "@/lib/pushNotifications";
 import { useFontScale } from "../FontScaleProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
@@ -12,6 +13,44 @@ export default function SettingsPage() {
   const { name, login, logout } = useUser();
   const { uiLang, setUiLang, t } = useUiLanguage();
   const [nameInput, setNameInput] = useState("");
+  const [notificationsOn, setNotificationsOn] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<UiStringKey | null>(null);
+
+  useEffect(() => {
+    if (!name) return;
+    fetch(`/api/notifications/status?name=${encodeURIComponent(name)}`)
+      .then((res) => res.json())
+      .then(({ enabled }) => setNotificationsOn(Boolean(enabled)))
+      .catch(() => {});
+  }, [name]);
+
+  async function toggleNotifications() {
+    if (!name || notificationsBusy) return;
+    setNotificationsBusy(true);
+    setNotificationsError(null);
+    try {
+      if (notificationsOn) {
+        await disableNotifications(name);
+        setNotificationsOn(false);
+      } else {
+        if (!pushSupported()) {
+          setNotificationsError("settings.notificationsUnsupported");
+          return;
+        }
+        const result = await enableNotifications(name, uiLang);
+        if (result.ok) {
+          setNotificationsOn(true);
+        } else if (result.error === "permission-denied") {
+          setNotificationsError("settings.notificationsDenied");
+        } else {
+          setNotificationsError("settings.notificationsUnsupported");
+        }
+      }
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,6 +120,32 @@ export default function SettingsPage() {
         </div>
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.uiLanguageHint")}</p>
       </section>
+
+      {name && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("settings.morningReminder")}</h2>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notificationsOn}
+              onClick={toggleNotifications}
+              disabled={notificationsBusy}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                notificationsOn ? "bg-[var(--clay-deep)]" : "bg-[var(--clay-tint)]"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--paper-raised)] shadow transition-transform ${
+                  notificationsOn ? "translate-x-[22px]" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="text-sm text-[var(--ink-soft)]">{t("settings.morningReminderHint")}</p>
+          {notificationsError && <p className="text-sm text-red-600 dark:text-red-400">{t(notificationsError)}</p>}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
         <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("settings.fontSize")}</h2>
