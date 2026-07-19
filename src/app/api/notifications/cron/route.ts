@@ -9,10 +9,11 @@ import { getWebPush } from "@/lib/webPush";
 
 export const maxDuration = 60;
 
-// Runs every 15 minutes (see vercel.ts) but only actually does anything during the Pacific 5am
-// hour, and only once per profile per day (lastNotifiedDate guards that) — so the frequent
-// schedule just exists to find "5am Pacific" reliably across DST without a fixed UTC offset
-// drifting twice a year, not to send repeatedly.
+// Runs once daily at a fixed UTC time (see vercel.ts — Hobby-plan Vercel accounts can't schedule
+// more often than that), landing at 5am Pacific during PDT and 4am during PST. The hour check
+// below is a generous sanity window rather than an exact match: it exists to stop a stray manual
+// trigger at the wrong time of day from notifying everyone, while still tolerating that seasonal
+// one-hour DST offset. lastNotifiedDate is what actually keeps this to once per profile per day.
 //
 // Deliberately never calls generateDailyReading/buildReading: this only *reads* the profile's
 // current cursor position via peekCurrentCurriculumItem, matching what removing the old nightly
@@ -24,8 +25,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  if (pacificHour() < 5) {
-    return NextResponse.json({ status: "skipped", reason: "not yet 5am Pacific" });
+  const hour = pacificHour();
+  if (hour < 3 || hour > 8) {
+    return NextResponse.json({ status: "skipped", reason: "outside the morning window" });
   }
 
   const today = pacificDateString();

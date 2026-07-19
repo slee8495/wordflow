@@ -8,11 +8,13 @@ import type { VercelConfig } from "@vercel/config/v1";
 // curriculum cursor on days someone never opened the app — skipping them past whatever they'd
 // missed instead of picking back up where they left off. See src/app/api/notifications/cron.
 //
-// Scheduled every 15 minutes rather than once at a fixed UTC time: Vercel cron schedules are
-// UTC-only, and a fixed offset for "5am Pacific" would drift an hour twice a year across DST.
-// The route itself checks the actual Pacific wall-clock hour and a per-profile lastNotifiedDate
-// guard, so only the first invocation on/after 5am each day does anything.
+// Hobby-plan Vercel accounts only allow daily (not sub-daily) cron schedules, so this can't poll
+// every 15 minutes to find "5am Pacific" precisely across DST the way a Pro plan could. 12:00
+// UTC is exact during PDT (most of the year, roughly March-November); during PST it lands at
+// 4am Pacific instead of 5am. The route itself sanity-checks the actual Pacific hour against a
+// generous window (rather than requiring exactly 5) so a stray manual trigger at the wrong time
+// of day doesn't notify everyone, while still tolerating that seasonal one-hour DST offset.
 export const config: VercelConfig = {
   framework: "nextjs",
-  crons: [{ path: "/api/notifications/cron", schedule: "*/15 * * * *" }],
+  crons: [{ path: "/api/notifications/cron", schedule: "0 12 * * *" }],
 };
