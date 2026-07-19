@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const content = await getOrFetchPassage(book, chapter, lang);
     if (name) {
       const profile = await findOrCreateProfile(name);
-      await logDeepRead(profile.id, book, chapter);
+      await logDeepRead(profile, book, chapter);
     }
     return NextResponse.json({ content });
   } catch (err) {

@@ -1,19 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DEFAULT_NOTIFICATION_HOUR } from "@/lib/date";
 import { FONT_SCALES } from "@/lib/fontScale";
 import { fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
-import { disableNotifications, enableNotifications, pushSupported } from "@/lib/pushNotifications";
+import { disableNotifications, enableNotifications, pushSupported, updateNotificationHour } from "@/lib/pushNotifications";
+import { COMMON_TIMEZONES } from "@/lib/timezones";
 import { useFontScale } from "../FontScaleProvider";
+import { useTimezone } from "../TimezoneProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
+
+function formatHourLabel(hour: number, lang: "ko" | "en"): string {
+  const d = new Date();
+  d.setHours(hour, 0, 0, 0);
+  return new Intl.DateTimeFormat(lang === "ko" ? "ko-KR" : "en-US", { hour: "numeric", minute: "2-digit" }).format(d);
+}
 
 export default function SettingsPage() {
   const { scale, setScale } = useFontScale();
   const { name, login, logout } = useUser();
   const { uiLang, setUiLang, t } = useUiLanguage();
+  const { timezone, setTimezone } = useTimezone();
   const [nameInput, setNameInput] = useState("");
   const [notificationsOn, setNotificationsOn] = useState(false);
+  const [notificationHour, setNotificationHour] = useState(DEFAULT_NOTIFICATION_HOUR);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationsError, setNotificationsError] = useState<UiStringKey | null>(null);
 
@@ -21,7 +32,10 @@ export default function SettingsPage() {
     if (!name) return;
     fetch(`/api/notifications/status?name=${encodeURIComponent(name)}`)
       .then((res) => res.json())
-      .then(({ enabled }) => setNotificationsOn(Boolean(enabled)))
+      .then(({ enabled, notificationHour: hour }) => {
+        setNotificationsOn(Boolean(enabled));
+        if (typeof hour === "number") setNotificationHour(hour);
+      })
       .catch(() => {});
   }, [name]);
 
@@ -38,7 +52,7 @@ export default function SettingsPage() {
           setNotificationsError("settings.notificationsUnsupported");
           return;
         }
-        const result = await enableNotifications(name, uiLang);
+        const result = await enableNotifications(name, uiLang, timezone, notificationHour);
         if (result.ok) {
           setNotificationsOn(true);
         } else if (result.error === "permission-denied") {
@@ -50,6 +64,11 @@ export default function SettingsPage() {
     } finally {
       setNotificationsBusy(false);
     }
+  }
+
+  async function changeNotificationHour(hour: number) {
+    setNotificationHour(hour);
+    if (name && notificationsOn) await updateNotificationHour(name, hour);
   }
 
   return (
@@ -121,6 +140,25 @@ export default function SettingsPage() {
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.uiLanguageHint")}</p>
       </section>
 
+      <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
+        <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("settings.timezone")}</h2>
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="w-fit rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
+        >
+          {!COMMON_TIMEZONES.some((z) => z.value === timezone) && (
+            <option value={timezone}>{timezone}</option>
+          )}
+          {COMMON_TIMEZONES.map((z) => (
+            <option key={z.value} value={z.value}>
+              {z.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-sm text-[var(--ink-soft)]">{t("settings.timezoneHint")}</p>
+      </section>
+
       {name && (
         <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
           <div className="flex items-center justify-between">
@@ -142,6 +180,22 @@ export default function SettingsPage() {
               />
             </button>
           </div>
+          {notificationsOn && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--ink)]">{t("settings.notificationHour")}</span>
+              <select
+                value={notificationHour}
+                onChange={(e) => changeNotificationHour(Number(e.target.value))}
+                className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
+              >
+                {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+                  <option key={h} value={h}>
+                    {formatHourLabel(h, uiLang)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <p className="text-sm text-[var(--ink-soft)]">{t("settings.morningReminderHint")}</p>
           {notificationsError && <p className="text-sm text-red-600 dark:text-red-400">{t(notificationsError)}</p>}
         </section>

@@ -12,7 +12,7 @@ import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, deepReadingLogs, readings, type Profile } from "@/db/schema";
 import { BIBLE_BOOKS, chapterCountForBook } from "@/lib/bibleBooks";
-import { pacificDateString } from "@/lib/date";
+import { profileDateString } from "@/lib/date";
 import { parsePassageRef } from "@/lib/passageRef";
 
 const TRAILING_PACE_DAYS = 14;
@@ -29,7 +29,7 @@ export type ProgressPayload = {
   currentBookChaptersTouched: number | null;
   currentBookTotalChapters: number | null;
   currentBookProgressPct: number | null; // chaptersTouched / totalChapters * 100, for currentBook
-  projectedCompletionDate: string | null; // YYYY-MM-DD, Pacific
+  projectedCompletionDate: string | null; // YYYY-MM-DD, in the profile's own timezone
   perBookProgress: { book: string; testament: "old" | "new"; chaptersTouched: number; totalChapters: number; pct: number }[];
   activityCount: number; // readings + deep-reading-log rows, scoped the same as everything else
 };
@@ -126,7 +126,7 @@ export async function getReadingProgress(profile: Profile, scope: ProgressScope)
   // Trailing pace for the completion projection — always a fixed 14-day window regardless of
   // `scope`. Stays curriculum-entry-based: it's projecting when the CURRICULUM LOOP finishes,
   // not Bible chapter coverage.
-  const paceSince = pacificDateString(-TRAILING_PACE_DAYS);
+  const paceSince = profileDateString(profile, -TRAILING_PACE_DAYS);
   const [readingPace] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(readings)
@@ -138,7 +138,7 @@ export async function getReadingProgress(profile: Profile, scope: ProgressScope)
   const pace = ((readingPace?.count ?? 0) + (deepPace?.count ?? 0)) / TRAILING_PACE_DAYS;
 
   const remaining = curriculumLength - profile.cursorPosition;
-  const projectedCompletionDate = pace > 0 ? pacificDateString(Math.ceil(remaining / pace)) : null;
+  const projectedCompletionDate = pace > 0 ? profileDateString(profile, Math.ceil(remaining / pace)) : null;
 
   // Same scope as everything else on this payload — "this cycle" or lifetime, no separate
   // day-range picker.

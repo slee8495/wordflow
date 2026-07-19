@@ -3,17 +3,23 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles, pushSubscriptions } from "@/db/schema";
 import { peekCurrentCurriculumItem } from "@/lib/generateReading";
-import { pacificDateString, pacificHour } from "@/lib/date";
+import { DEFAULT_NOTIFICATION_HOUR, profileDateString, profileHour } from "@/lib/date";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { getWebPush } from "@/lib/webPush";
 
 export const maxDuration = 60;
 
-// Runs once daily at a fixed UTC time (see vercel.ts — Hobby-plan Vercel accounts can't schedule
-// more often than that), landing at 5am Pacific during PDT and 4am during PST. The hour check
-// below is a generous sanity window rather than an exact match: it exists to stop a stray manual
-// trigger at the wrong time of day from notifying everyone, while still tolerating that seasonal
-// one-hour DST offset. lastNotifiedDate is what actually keeps this to once per profile per day.
+// Triggered externally every 15 minutes (see .github/workflows/morning-reminder-cron.yml) rather
+// than by Vercel's own Cron feature — Hobby-plan accounts can only schedule Vercel Cron once a
+// day, which isn't frequent enough to catch each profile's own chosen local hour. Every profile
+// carries its own IANA timezone and notificationHour (0-23, defaulting to
+// DEFAULT_NOTIFICATION_HOUR), so this checks each one independently rather than gating the whole
+// run on a single hour — two profiles in different timezones (or with different hour
+// preferences) can each get notified at their own right moment from the same invocation.
+//
+// lastNotifiedDate (a date string in the profile's OWN timezone) is what actually keeps this to
+// once per profile per day — the 15-minute polling means a profile's chosen hour is "hit" on
+// whichever invocation lands first after it begins, then skipped for the rest of that day.
 //
 // Deliberately never calls generateDailyReading/buildReading: this only *reads* the profile's
 // current cursor position via peekCurrentCurriculumItem, matching what removing the old nightly
@@ -25,19 +31,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const hour = pacificHour();
-  if (hour < 3 || hour > 8) {
-    return NextResponse.json({ status: "skipped", reason: "outside the morning window" });
-  }
-
-  const today = pacificDateString();
   const due = await db.select().from(profiles).where(eq(profiles.notificationsEnabled, true));
 
   let sent = 0;
   let skipped = 0;
 
   for (const profile of due) {
+    const today = profileDateString(profile);
     if (profile.lastNotifiedDate === today) {
+      skipped++;
+      continue;
+    }
+
+    const targetHour = profile.notificationHour ?? DEFAULT_NOTIFICATION_HOUR;
+    if (profileHour(profile) !== targetHour) {
       skipped++;
       continue;
     }

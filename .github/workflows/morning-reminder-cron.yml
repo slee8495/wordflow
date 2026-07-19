@@ -1,0 +1,21 @@
+name: Morning reminder cron
+
+# Vercel's Hobby plan only allows a daily Cron schedule, but each profile now picks their own
+# timezone + notification hour (see src/app/api/notifications/cron/route.ts) — pinging the
+# endpoint every 15 minutes is what actually catches each profile at their own chosen local
+# moment. The route itself is idempotent per profile per day (lastNotifiedDate), so over-firing
+# this is safe.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the notifications cron endpoint
+        run: |
+          curl --fail-with-body -sS \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://wordflow-jade.vercel.app/api/notifications/cron"

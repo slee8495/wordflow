@@ -6,10 +6,10 @@
 import { generateText } from "ai";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { bibleTextCache, deepReadingLogs } from "@/db/schema";
+import { bibleTextCache, deepReadingLogs, type Profile } from "@/db/schema";
 import { fetchNltPassage } from "@/lib/bible";
 import { MODEL } from "@/lib/ai/model";
-import { todayDateString } from "@/lib/date";
+import { profileDateString } from "@/lib/date";
 
 async function readCache(translation: string, book: string, chapter: number): Promise<string | null> {
   const [row] = await db
@@ -53,14 +53,14 @@ export async function getOrFetchPassage(book: string, chapter: number, lang: "en
   return (await readCache(translation, book, chapter)) ?? content;
 }
 
-export async function logDeepRead(profileId: number, book: string, chapter: number): Promise<void> {
-  const forDate = todayDateString();
+export async function logDeepRead(profile: Profile, book: string, chapter: number): Promise<void> {
+  const forDate = profileDateString(profile);
   const [existing] = await db
     .select()
     .from(deepReadingLogs)
     .where(
       and(
-        eq(deepReadingLogs.profileId, profileId),
+        eq(deepReadingLogs.profileId, profile.id),
         eq(deepReadingLogs.book, book),
         eq(deepReadingLogs.chapter, chapter),
         eq(deepReadingLogs.forDate, forDate),
@@ -69,5 +69,5 @@ export async function logDeepRead(profileId: number, book: string, chapter: numb
     .limit(1);
   if (existing) return;
 
-  await db.insert(deepReadingLogs).values({ profileId, book, chapter, forDate });
+  await db.insert(deepReadingLogs).values({ profileId: profile.id, book, chapter, forDate });
 }

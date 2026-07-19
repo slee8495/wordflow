@@ -49,11 +49,17 @@ const STRINGS = {
     ko: "앱의 메뉴와 버튼 문구 언어예요. 성경 본문 언어는 각 화면에서 따로 선택해요.",
     en: "Changes the app's menus and labels. Bible passage language is chosen separately on each page.",
   },
+  "settings.timezone": { ko: "시간대", en: "Timezone" },
+  "settings.timezoneHint": {
+    ko: "오늘의 말씀이 넘어가는 기준 시간과 아침 알림 시각의 기준이 돼요. 보통 자동으로 감지되지만 필요하면 바꿀 수 있어요.",
+    en: "Sets the day boundary for today's reading and the reference for your morning reminder time. Usually auto-detected, but you can change it here.",
+  },
   "settings.morningReminder": { ko: "아침 알림", en: "Morning Reminder" },
   "settings.morningReminderHint": {
-    ko: "매일 아침 5시(태평양시간)에 오늘 읽을 본문 범위를 알려드려요.",
-    en: "Every morning at 5am (Pacific time), get a notification with today's passage range.",
+    ko: "고른 시간대 기준으로, 매일 정해진 시각에 오늘 읽을 본문 범위를 알려드려요.",
+    en: "Get a notification with today's passage range, at a time you choose, in your own timezone.",
   },
+  "settings.notificationHour": { ko: "받을 시각", en: "Notification time" },
   "settings.notificationsUnsupported": {
     ko: "이 브라우저에서는 알림을 지원하지 않아요.",
     en: "Notifications aren't supported in this browser.",

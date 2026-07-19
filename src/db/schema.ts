@@ -55,13 +55,24 @@ export const profiles = pgTable("profiles", {
   // cron — can still compose the notification in the right language. Null until the client's
   // sync effect has run at least once; treat as the app's default UI language until then.
   uiLang: varchar("ui_lang", { length: 8 }),
-  // Whether the 5am "today's reading is ready" push notification is turned on. Kept in sync with
+  // IANA timezone name (e.g. "America/Los_Angeles", "Asia/Seoul") — the day boundary for this
+  // profile's readings/forDate, season detection, and progress stats, and the reference zone for
+  // notificationHour below. Auto-captured client-side from the browser on first load (see
+  // ProfileSettingsSync.tsx), overridable in Settings. Null until synced at least once; every
+  // read site falls back to DEFAULT_TIMEZONE (src/lib/date.ts) until then, preserving the
+  // previous hardcoded-Pacific behavior for profiles that predate this column.
+  timezone: varchar("timezone", { length: 64 }),
+  // Hour of day (0-23) in the profile's own `timezone` to receive the morning reminder. Null
+  // means "use DEFAULT_NOTIFICATION_HOUR" (see src/lib/date.ts), matching the original fixed-5am
+  // behavior until a profile explicitly picks something else in Settings.
+  notificationHour: integer("notification_hour"),
+  // Whether the "today's reading is ready" push notification is turned on. Kept in sync with
   // whether any row exists in pushSubscriptions for this profile — true only once at least one
   // subscription has been saved, false again once the last one is removed.
   notificationsEnabled: boolean("notifications_enabled").default(false).notNull(),
   // Guards the cron against sending more than once per calendar day per profile — see
-  // src/app/api/notifications/cron/route.ts. Pacific-time date string, same convention as
-  // lastReadDate/forDate elsewhere.
+  // src/app/api/notifications/cron/route.ts. A date string in the profile's OWN timezone, same
+  // convention as lastReadDate/forDate elsewhere (which are also now per-profile-timezone).
   lastNotifiedDate: date("last_notified_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

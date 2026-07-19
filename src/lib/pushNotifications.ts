@@ -20,7 +20,12 @@ export function pushSupported(): boolean {
   );
 }
 
-export async function enableNotifications(name: string, uiLang: "ko" | "en"): Promise<{ ok: boolean; error?: string }> {
+export async function enableNotifications(
+  name: string,
+  uiLang: "ko" | "en",
+  timezone: string,
+  notificationHour: number,
+): Promise<{ ok: boolean; error?: string }> {
   if (!pushSupported()) return { ok: false, error: "unsupported" };
 
   const permission = await Notification.requestPermission();
@@ -43,10 +48,19 @@ export async function enableNotifications(name: string, uiLang: "ko" | "en"): Pr
   const res = await fetch("/api/notifications/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, uiLang, subscription: subscription.toJSON() }),
+    body: JSON.stringify({ name, uiLang, timezone, notificationHour, subscription: subscription.toJSON() }),
   });
   if (!res.ok) return { ok: false, error: "save-failed" };
   return { ok: true };
+}
+
+export async function updateNotificationHour(name: string, notificationHour: number): Promise<boolean> {
+  const res = await fetch("/api/notifications/preferences", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, notificationHour }),
+  });
+  return res.ok;
 }
 
 export async function disableNotifications(name: string): Promise<void> {

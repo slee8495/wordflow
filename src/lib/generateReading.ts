@@ -7,7 +7,7 @@ import { curriculumItems, profiles, readings, type CurriculumItem, type Profile 
 import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs } from "@/lib/youtube";
-import { todayDateString, pacificDateString } from "@/lib/date";
+import { profileDateString } from "@/lib/date";
 import { getActiveSeason } from "@/lib/season";
 
 const bilingualField = (description: string) =>
@@ -258,7 +258,7 @@ async function ensurePrefetchedNext(profileId: number): Promise<void> {
   const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
   if (!profile) return;
 
-  await buildReading(profile, todayDateString(), false).catch(() => {
+  await buildReading(profile, profileDateString(profile), false).catch(() => {
     // best-effort — if this fails, the next reveal just falls back to synchronous generation
   });
 }
@@ -271,7 +271,7 @@ async function ensurePrefetchedNext(profileId: number): Promise<void> {
 // progress — that's the "regenerating during a season always catches up" behavior — and the
 // cursor resumes exactly where it was once the season window closes.
 async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
-  const activeSeason = getActiveSeason(pacificDateString());
+  const activeSeason = getActiveSeason(profileDateString(profile));
   if (activeSeason) {
     const [seasonItem] = await db
       .select()
@@ -307,7 +307,7 @@ export async function catchUpReading(profile: Profile, orderIndex: number, forDa
 // in the background (after() — doesn't add latency here) so that visit's *next* passage is ready
 // before it's asked for.
 export async function generateDailyReading(profile: Profile) {
-  const forDate = todayDateString();
+  const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
 
   const [existing] = await db
@@ -335,14 +335,14 @@ export async function generateDailyReading(profile: Profile) {
 // the background for whatever comes after this one.
 export async function generateNextReading(profile: Profile) {
   after(() => ensurePrefetchedNext(profile.id));
-  return revealOrGenerate(profile, todayDateString());
+  return revealOrGenerate(profile, profileDateString(profile));
 }
 
 // All of today's readings for a profile, oldest first, so the UI can page back and forth
 // through however many times someone has read ahead today. Generates the first one if none
 // exist yet, same as generateDailyReading.
 export async function getTodayReadings(profile: Profile) {
-  const forDate = todayDateString();
+  const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
 
   const existing = await db
@@ -373,6 +373,19 @@ export async function findOrCreateProfile(name: string): Promise<Profile> {
   return created;
 }
 
+// Updates + returns the profile with a client-supplied timezone applied immediately, instead of
+// waiting on ProfileSettingsSync's separate POST to land first. Without this, a profile's very
+// first request of the day (the one that actually decides that day's forDate) could race ahead of
+// the sync and generate against DEFAULT_TIMEZONE — a mistake that then persists for that whole
+// calendar day. Every read-heavy route that calls findOrCreateProfile and then immediately does
+// something forDate-sensitive (generateDailyReading, getTodayReadings, etc.) should pass through
+// here first with whatever timezone the client's TimezoneProvider currently has.
+export async function syncProfileTimezone(profile: Profile, timezone: string | null | undefined): Promise<Profile> {
+  if (!timezone || profile.timezone === timezone) return profile;
+  const [updated] = await db.update(profiles).set({ timezone }).where(eq(profiles.id, profile.id)).returning();
+  return updated ?? profile;
+}
+
 // Read-only: reports which curriculum item a profile's cursor is CURRENTLY sitting on, without
 // generating a reading or advancing anything. Mirrors buildReading/buildFirstReadingOfDay's own
 // season-then-rotation lookup so the answer always matches what actually shows up if the profile
@@ -381,7 +394,7 @@ export async function findOrCreateProfile(name: string): Promise<Profile> {
 // the bug that removing the old nightly cron fixed (see vercel.ts): it would silently consume a
 // curriculum step for every profile whether or not they actually visited that day.
 export async function peekCurrentCurriculumItem(profile: Profile): Promise<CurriculumItem | null> {
-  const activeSeason = getActiveSeason(pacificDateString());
+  const activeSeason = getActiveSeason(profileDateString(profile));
   if (activeSeason) {
     const [seasonItem] = await db
       .select()
