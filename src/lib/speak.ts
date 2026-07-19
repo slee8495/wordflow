@@ -13,6 +13,11 @@
 //    call as soon as a newer one starts, so stale audio never gets played.
 const audioUrlCache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string | null>>();
+// Reused across every chunk in (and across) a playback session instead of a fresh `new Audio()`
+// per chunk. Mobile browsers grant "keep playing while backgrounded/locked" permission to the
+// specific element a user gesture started — swapping this element's `src` stays inside that
+// grant, whereas creating a new element for each sentence generally does not, which is why
+// playback used to stop dead at the sentence you were on the moment you backgrounded the app.
 let currentAudio: HTMLAudioElement | null = null;
 // Resolver for the playAudio() promise currently in flight, if any — stopSpeaking() uses this to
 // unblock a hung await immediately (see the comment on playAudio for why that's necessary).
@@ -113,16 +118,25 @@ function fetchAudioUrl(text: string): Promise<string | null> {
 // either the clip actually ends/errors, or stopSpeaking() forces it via currentStopResolve.
 function playAudio(url: string, onStart?: () => void): Promise<boolean> {
   return new Promise((resolve) => {
-    const audio = new Audio(url);
+    const audio = currentAudio ?? new Audio();
     currentAudio = audio;
     currentStopResolve = resolve;
-    const settle = (finished: boolean) => {
+
+    const onPlaying = () => onStart?.();
+    const onEnded = () => settle(true);
+    const onError = () => settle(false);
+    function settle(finished: boolean) {
+      audio.removeEventListener("playing", onPlaying);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
       currentStopResolve = null;
       resolve(finished);
-    };
-    audio.addEventListener("playing", () => onStart?.(), { once: true });
-    audio.addEventListener("ended", () => settle(true), { once: true });
-    audio.addEventListener("error", () => settle(false), { once: true });
+    }
+
+    audio.addEventListener("playing", onPlaying, { once: true });
+    audio.addEventListener("ended", onEnded, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+    audio.src = url;
     audio.play().catch(() => settle(false));
   });
 }

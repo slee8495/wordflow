@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ChatWidget } from "./ChatWidget";
 import { AppNav } from "./AppNav";
 import { FontScaleProvider } from "./FontScaleProvider";
 import { NowPlayingBar } from "./NowPlayingBar";
@@ -84,7 +83,6 @@ export default function RootLayout({
                   {children}
                 </main>
                 <NowPlayingBar />
-                <ChatWidget />
               </UserProvider>
             </PlaybackProvider>
           </UiLanguageProvider>
