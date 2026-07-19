@@ -21,7 +21,7 @@ let playToken = 0;
 
 const MAX_CHUNK_LENGTH = 200;
 
-function splitIntoChunks(text: string): string[] {
+export function splitIntoChunks(text: string): string[] {
   const sentences = text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) ?? [text];
   const chunks: string[] = [];
   let buf = "";
@@ -135,7 +135,10 @@ export function prefetchSpeech(text: string) {
   }
 }
 
-export async function speak(text: string, opts: { onPlaybackStart?: () => void } = {}) {
+export async function speak(
+  text: string,
+  opts: { onPlaybackStart?: () => void; onChunkStart?: (index: number) => void } = {},
+) {
   if (!text.trim()) return;
   stopSpeaking(); // also bumps playToken, so capture `token` only after this
   const token = playToken;
@@ -158,12 +161,17 @@ export async function speak(text: string, opts: { onPlaybackStart?: () => void }
     if (token !== playToken) return;
 
     if (!url) {
+      opts.onChunkStart?.(i);
       speakWithBrowserVoice(chunks.slice(i).join(" "), announceStart);
       return;
     }
-    const finishedCleanly = await playAudio(url, announceStart);
+    const finishedCleanly = await playAudio(url, () => {
+      announceStart();
+      opts.onChunkStart?.(i);
+    });
     if (token !== playToken) return;
     if (!finishedCleanly) {
+      opts.onChunkStart?.(i + 1);
       speakWithBrowserVoice(chunks.slice(i + 1).join(" "), announceStart);
       return;
     }

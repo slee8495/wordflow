@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { pauseSpeaking, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
+import { useEffect, useMemo, useState } from "react";
+import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
 import { useUser } from "../UserProvider";
@@ -249,12 +249,19 @@ export default function ReadingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [speakState, setSpeakState] = useState<"loading" | "playing" | "paused" | null>(null);
+  const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
+
+  const passageChunks = useMemo(() => (passageText ? splitIntoChunks(passageText) : []), [passageText]);
 
   async function speakPassage() {
     if (!passageText?.trim()) return;
     setSpeakState("loading");
-    await speak(passageText, { onPlaybackStart: () => setSpeakState((cur) => (cur ? "playing" : cur)) });
+    await speak(passageText, {
+      onPlaybackStart: () => setSpeakState((cur) => (cur ? "playing" : cur)),
+      onChunkStart: (index) => setActiveChunkIndex(index),
+    });
     setSpeakState(null);
+    setActiveChunkIndex(null);
   }
 
   function togglePausePassage() {
@@ -274,6 +281,7 @@ export default function ReadingPage() {
   function stopPassage() {
     stopSpeaking();
     setSpeakState(null);
+    setActiveChunkIndex(null);
   }
 
   useEffect(() => {
@@ -283,10 +291,13 @@ export default function ReadingPage() {
 
   useEffect(() => {
     if (!selectedBook || !selectedChapter || !name) return;
+    stopSpeaking();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     setPassageText(null);
+    setSpeakState(null);
+    setActiveChunkIndex(null);
     fetch(
       `/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}&name=${encodeURIComponent(name)}`,
     )
@@ -456,7 +467,21 @@ export default function ReadingPage() {
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             {passageText && (
               <>
-                <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-line">
+                  {passageChunks.map((chunk, i) => (
+                    <span
+                      key={i}
+                      className={
+                        i === activeChunkIndex
+                          ? "rounded bg-[var(--clay-tint)] text-[var(--ink)] transition-colors"
+                          : "transition-colors"
+                      }
+                    >
+                      {chunk}
+                      {i < passageChunks.length - 1 ? " " : ""}
+                    </span>
+                  ))}
+                </p>
                 <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
                   {contentLanguage === "en"
                     ? "NLT (New Living Translation)"
