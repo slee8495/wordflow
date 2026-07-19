@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
@@ -266,17 +266,29 @@ export default function ReadingPage() {
   const [error, setError] = useState<UiStringKey | null>(null);
   const [speakState, setSpeakState] = useState<"loading" | "playing" | "paused" | null>(null);
   const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
+  // Guards against a stale speakPassage() call's cleanup running after a newer one (e.g. clicking
+  // a different sentence mid-playback) has already taken over — see speak.ts's own playToken for
+  // the same pattern at the audio layer; this is the same idea one level up, for React state.
+  const speakGenRef = useRef(0);
 
   const passageChunks = useMemo(() => (passageText ? splitIntoChunks(passageText) : []), [passageText]);
 
   async function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
+    const gen = ++speakGenRef.current;
     setSpeakState("loading");
     await speak(passageText, {
-      onPlaybackStart: () => setSpeakState((cur) => (cur ? "playing" : cur)),
-      onChunkStart: (index) => setActiveChunkIndex(index),
+      onPlaybackStart: () => {
+        if (speakGenRef.current !== gen) return;
+        setSpeakState((cur) => (cur ? "playing" : cur));
+      },
+      onChunkStart: (index) => {
+        if (speakGenRef.current !== gen) return;
+        setActiveChunkIndex(index);
+      },
       startIndex,
     });
+    if (speakGenRef.current !== gen) return; // a newer speakPassage() call superseded this one
     setSpeakState(null);
     setActiveChunkIndex(null);
   }

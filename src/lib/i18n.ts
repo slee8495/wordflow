@@ -4,7 +4,7 @@
 export type Lang = "ko" | "en";
 
 export const UI_LANG_STORAGE_KEY = "wordflow:uiLang";
-export const DEFAULT_UI_LANG: Lang = "ko";
+export const DEFAULT_UI_LANG: Lang = "en";
 
 const STRINGS = {
   "nav.today": { ko: "오늘", en: "Today" },

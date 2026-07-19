@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
@@ -135,6 +135,10 @@ export default function Home() {
   const [speakingSection, setSpeakingSection] = useState<{ id: string; state: SpeakState } | null>(null);
   const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
   const [generatingNext, setGeneratingNext] = useState(false);
+  // Guards against a stale speakSection() call's cleanup running after a newer one (e.g. clicking
+  // a different sentence, even within the same section) has already taken over — mirrors
+  // speak.ts's own playToken at the audio layer, one level up for React state.
+  const speakGenRef = useRef(0);
 
   useEffect(() => {
     const storedLang = localStorage.getItem(LANG_KEY);
@@ -168,12 +172,20 @@ export default function Home() {
 
   async function speakSection(id: string, text: string | null, startIndex?: number) {
     if (!text?.trim()) return;
+    const gen = ++speakGenRef.current;
     setSpeakingSection({ id, state: "loading" });
     await speak(text, {
-      onPlaybackStart: () => setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current)),
-      onChunkStart: (index) => setActiveChunkIndex(index),
+      onPlaybackStart: () => {
+        if (speakGenRef.current !== gen) return;
+        setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current));
+      },
+      onChunkStart: (index) => {
+        if (speakGenRef.current !== gen) return;
+        setActiveChunkIndex(index);
+      },
       startIndex,
     });
+    if (speakGenRef.current !== gen) return; // a newer speakSection() call superseded this one
     setSpeakingSection((current) => (current?.id === id ? null : current));
     setActiveChunkIndex(null);
   }
