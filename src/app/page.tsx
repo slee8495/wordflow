@@ -31,15 +31,17 @@ type Reading = {
 type SpeakState = "loading" | "playing" | "paused";
 
 // Renders text as per-sentence spans, highlighting the one currently being read aloud when this
-// section is the active speaker.
+// section is the active speaker. Clicking a sentence jumps playback to it.
 function HighlightedText({
   text,
   isActiveSection,
   activeChunkIndex,
+  onSentenceClick,
 }: {
   text: string;
   isActiveSection: boolean;
   activeChunkIndex: number | null;
+  onSentenceClick: (index: number) => void;
 }) {
   const chunks = splitIntoChunks(text);
   return (
@@ -47,10 +49,19 @@ function HighlightedText({
       {chunks.map((chunk, i) => (
         <span
           key={i}
+          role="button"
+          tabIndex={0}
+          onClick={() => onSentenceClick(i)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSentenceClick(i);
+            }
+          }}
           className={
             isActiveSection && i === activeChunkIndex
-              ? "rounded bg-[var(--clay-deep)] font-semibold text-[var(--paper-raised)] transition-colors"
-              : "transition-colors"
+              ? "cursor-pointer rounded bg-[var(--clay-deep)] font-semibold text-[var(--paper-raised)] transition-colors"
+              : "cursor-pointer transition-colors hover:bg-[var(--clay-tint)]"
           }
         >
           {chunk}
@@ -155,12 +166,13 @@ export default function Home() {
     localStorage.setItem(LANG_KEY, lang);
   }
 
-  async function speakSection(id: string, text: string | null) {
+  async function speakSection(id: string, text: string | null, startIndex?: number) {
     if (!text?.trim()) return;
     setSpeakingSection({ id, state: "loading" });
     await speak(text, {
       onPlaybackStart: () => setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current)),
       onChunkStart: (index) => setActiveChunkIndex(index),
+      startIndex,
     });
     setSpeakingSection((current) => (current?.id === id ? null : current));
     setActiveChunkIndex(null);
@@ -370,6 +382,7 @@ export default function Home() {
                   text={passageText}
                   isActiveSection={speakingSection?.id === "passage"}
                   activeChunkIndex={activeChunkIndex}
+                  onSentenceClick={(i) => speakSection("passage", passageText, i)}
                 />
               )}
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
@@ -393,6 +406,7 @@ export default function Home() {
               text={pick(reading.storySummaryEn, reading.storySummary)}
               isActiveSection={speakingSection?.id === "story"}
               activeChunkIndex={activeChunkIndex}
+              onSentenceClick={(i) => speakSection("story", pick(reading.storySummaryEn, reading.storySummary), i)}
             />
           </Section>
 
@@ -407,6 +421,9 @@ export default function Home() {
               text={pick(reading.historicalContextEn, reading.historicalContext)}
               isActiveSection={speakingSection?.id === "context"}
               activeChunkIndex={activeChunkIndex}
+              onSentenceClick={(i) =>
+                speakSection("context", pick(reading.historicalContextEn, reading.historicalContext), i)
+              }
             />
           </Section>
 
@@ -421,6 +438,9 @@ export default function Home() {
               text={pick(reading.personalMessageEn, reading.personalMessage)}
               isActiveSection={speakingSection?.id === "message"}
               activeChunkIndex={activeChunkIndex}
+              onSentenceClick={(i) =>
+                speakSection("message", pick(reading.personalMessageEn, reading.personalMessage), i)
+              }
             />
           </Section>
 

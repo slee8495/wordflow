@@ -269,12 +269,13 @@ export default function ReadingPage() {
 
   const passageChunks = useMemo(() => (passageText ? splitIntoChunks(passageText) : []), [passageText]);
 
-  async function speakPassage() {
+  async function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
     setSpeakState("loading");
     await speak(passageText, {
       onPlaybackStart: () => setSpeakState((cur) => (cur ? "playing" : cur)),
       onChunkStart: (index) => setActiveChunkIndex(index),
+      startIndex,
     });
     setSpeakState(null);
     setActiveChunkIndex(null);
@@ -457,7 +458,7 @@ export default function ReadingPage() {
               {passageText &&
                 (!speakState ? (
                   <button
-                    onClick={speakPassage}
+                    onClick={() => speakPassage()}
                     className="text-base"
                     aria-label={selectedBook && selectedChapter ? listenToAria(uiLang, selectedBook, selectedChapter) : undefined}
                   >
@@ -487,10 +488,19 @@ export default function ReadingPage() {
                   {passageChunks.map((chunk, i) => (
                     <span
                       key={i}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => speakPassage(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          speakPassage(i);
+                        }
+                      }}
                       className={
                         i === activeChunkIndex
-                          ? "rounded bg-[var(--clay-deep)] font-semibold text-[var(--paper-raised)] transition-colors"
-                          : "transition-colors"
+                          ? "cursor-pointer rounded bg-[var(--clay-deep)] font-semibold text-[var(--paper-raised)] transition-colors"
+                          : "cursor-pointer transition-colors hover:bg-[var(--clay-tint)]"
                       }
                     >
                       {chunk}

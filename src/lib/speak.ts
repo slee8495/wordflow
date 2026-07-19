@@ -137,15 +137,18 @@ export function prefetchSpeech(text: string) {
 
 export async function speak(
   text: string,
-  opts: { onPlaybackStart?: () => void; onChunkStart?: (index: number) => void } = {},
+  opts: { onPlaybackStart?: () => void; onChunkStart?: (index: number) => void; startIndex?: number } = {},
 ) {
   if (!text.trim()) return;
   stopSpeaking(); // also bumps playToken, so capture `token` only after this
   const token = playToken;
 
   const chunks = splitIntoChunks(text);
-  // Kick off every chunk's fetch immediately so later ones generate while earlier ones play.
-  const urlPromises = chunks.map((chunk) => fetchAudioUrl(chunk));
+  const startIndex = Math.min(Math.max(opts.startIndex ?? 0, 0), Math.max(chunks.length - 1, 0));
+  // Kick off every chunk's fetch immediately (from startIndex on — clicking ahead into a passage
+  // shouldn't generate audio for sentences the listener is skipping past) so later ones generate
+  // while earlier ones play.
+  const urlPromises = chunks.map((chunk, i) => (i >= startIndex ? fetchAudioUrl(chunk) : null));
   // Only the very first chunk's playback start should notify the caller — later chunks continue
   // the same "playing" session seamlessly.
   let announced = false;
@@ -155,7 +158,7 @@ export async function speak(
     opts.onPlaybackStart?.();
   };
 
-  for (let i = 0; i < urlPromises.length; i++) {
+  for (let i = startIndex; i < urlPromises.length; i++) {
     if (token !== playToken) return; // a newer speak() call, or an explicit stop, superseded this one
     const url = await urlPromises[i];
     if (token !== playToken) return;

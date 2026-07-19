@@ -35,7 +35,11 @@ const koreanPassageSchema = z.object({
     ),
   story: z
     .string()
-    .describe("같은 본문을 절 구분 없이, 하나로 자연스럽게 이어지는 이야기체 문단으로 적은 버전"),
+    .describe(
+      "같은 본문을 절 구분 없이, 하나로 자연스럽게 이어지는 이야기체 문단으로 적은 버전. " +
+        "verses 버전과 담긴 사건·대사·세부 내용의 양이 동일해야 하며, 절 번호와 줄바꿈만 제거하고 " +
+        "자연스러운 문장으로 이어붙이는 것— 요약하거나 일부 절을 생략하면 안 됨.",
+    ),
 });
 
 // No reliable Bible API exists for Korean 새번역 (API.Bible's key kept rejecting requests — see
@@ -48,7 +52,9 @@ async function generateKoreanPassage(reference: string, englishText: string | nu
     system:
       "당신은 성경 본문을 쉬운 한글로 옮기는 번역가입니다. 원문의 사건과 의미를 정확히 지키되, " +
       "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
-      "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요.",
+      "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요. " +
+      "story 버전은 verses 버전을 요약한 것이 아닙니다 — 모든 절의 내용을 빠짐없이 담아 절 번호만 " +
+      "빼고 이야기체 문장으로 자연스럽게 이어붙이세요.",
     prompt: [
       `본문: ${reference}`,
       englishText ? `영어 NLT 원문:\n${englishText}` : null,

@@ -42,17 +42,60 @@ const ENGLISH_WORSHIP_CHANNELS = [
 ];
 
 // The videoCategoryId filter (below) restricts to actual music content, but keyword search can
-// still surface clergy talks/liturgy that happen to match on title text (reported case: a
-// Catholic priest's reflection video matched a "찬양 {theme}" query). Filter those out
+// still surface clergy talks/liturgy/scripture-reading channels that happen to match on title
+// text (reported cases: a Catholic priest's reflection video, and a "daily excerpt" devotional-
+// reading channel, both matched a "찬양 {theme}" query despite not being music). Filter those out
 // regardless of category as a second layer.
-const EXCLUDE_TERMS = ["신부", "강론", "미사", "성당", "수녀"];
+// Deliberately does NOT include "묵상" (meditation) — "묵상찬양" (contemplative worship) is a
+// legitimate, common genre label on real worship channels, so that term flagged good results as
+// often as bad ones. "발췌문" (devotional excerpt) is unambiguous enough to keep.
+const EXCLUDE_TERMS = [
+  "신부",
+  "강론",
+  "미사",
+  "성당",
+  "수녀",
+  "발췌문",
+  "큐티",
+  "말씀나눔",
+  "말씀 나눔",
+  "강해",
+  "설교",
+  "새벽기도",
+  "sermon",
+  "devotional",
+  "bible study",
+  "scripture reading",
+  "homily",
+];
 
-function pickWorship(results: YoutubeResult[], allowlist: string[]): YoutubeResult | null {
+// Positive signal that a result is actually a song, not just uncategorized/mislabeled spoken
+// content. Korean worship uploads reliably self-label with one of these, so it's required there
+// (falling through to null rather than guessing). English worship songs are usually just titled
+// with the song/artist name with no "worship"/"praise" in sight (e.g. "Perfect Wisdom of Our
+// God" by Keith & Kristyn Getty) — requiring the term there rejected real matches far more often
+// than it caught bad ones, so English keeps the old best-effort fallback instead.
+const WORSHIP_POSITIVE_TERMS_KO = ["워십", "찬양", "예배", "찬미", "찬송", "worship"];
+const WORSHIP_POSITIVE_TERMS_EN = ["worship", "praise"];
+
+function pickWorship(
+  results: YoutubeResult[],
+  allowlist: string[],
+  positiveTerms: string[],
+  { requirePositiveMatch }: { requirePositiveMatch: boolean },
+): YoutubeResult | null {
   const safe = results.filter(
-    (r) => !EXCLUDE_TERMS.some((term) => r.title.includes(term) || r.channelTitle.includes(term)),
+    (r) => !EXCLUDE_TERMS.some((term) => r.title.toLowerCase().includes(term) || r.channelTitle.toLowerCase().includes(term)),
   );
-  const match = safe.find((r) => allowlist.some((name) => r.channelTitle.includes(name)));
-  return match ?? safe[0] ?? null;
+  const allowlisted = safe.find((r) => allowlist.some((name) => r.channelTitle.includes(name)));
+  if (allowlisted) return allowlisted;
+  const positiveMatch = safe.find((r) =>
+    positiveTerms.some(
+      (term) => r.title.toLowerCase().includes(term.toLowerCase()) || r.channelTitle.toLowerCase().includes(term.toLowerCase()),
+    ),
+  );
+  if (positiveMatch) return positiveMatch;
+  return requirePositiveMatch ? null : (safe[0] ?? null);
 }
 
 // videoDuration: "medium" (4-20 min) excludes YouTube Shorts and the old-style short clips
@@ -68,7 +111,7 @@ export async function searchWorshipSongs(
     searchYoutube(`worship ${themeEn}`, 8, { videoDuration: "medium", videoCategoryId: "10" }),
   ]);
   return {
-    ko: pickWorship(koResults, KOREAN_WORSHIP_CHANNELS),
-    en: pickWorship(enResults, ENGLISH_WORSHIP_CHANNELS),
+    ko: pickWorship(koResults, KOREAN_WORSHIP_CHANNELS, WORSHIP_POSITIVE_TERMS_KO, { requirePositiveMatch: true }),
+    en: pickWorship(enResults, ENGLISH_WORSHIP_CHANNELS, WORSHIP_POSITIVE_TERMS_EN, { requirePositiveMatch: false }),
   };
 }
