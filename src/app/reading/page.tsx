@@ -473,7 +473,7 @@ export default function ReadingPage() {
                       key={i}
                       className={
                         i === activeChunkIndex
-                          ? "rounded bg-[var(--clay-tint)] text-[var(--ink)] transition-colors"
+                          ? "rounded bg-[var(--clay-deep)] text-[var(--paper-raised)] transition-colors"
                           : "transition-colors"
                       }
                     >
