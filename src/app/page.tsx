@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { pauseSpeaking, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
+import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { useUser } from "./UserProvider";
 
@@ -27,6 +27,37 @@ type Reading = {
 };
 
 type SpeakState = "loading" | "playing" | "paused";
+
+// Renders text as per-sentence spans, highlighting the one currently being read aloud when this
+// section is the active speaker.
+function HighlightedText({
+  text,
+  isActiveSection,
+  activeChunkIndex,
+}: {
+  text: string;
+  isActiveSection: boolean;
+  activeChunkIndex: number | null;
+}) {
+  const chunks = splitIntoChunks(text);
+  return (
+    <p className="text-sm leading-relaxed whitespace-pre-line">
+      {chunks.map((chunk, i) => (
+        <span
+          key={i}
+          className={
+            isActiveSection && i === activeChunkIndex
+              ? "rounded bg-[var(--clay-deep)] font-semibold text-[var(--paper-raised)] transition-colors"
+              : "transition-colors"
+          }
+        >
+          {chunk}
+          {i < chunks.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </p>
+  );
+}
 
 function Section({
   title,
@@ -88,6 +119,7 @@ export default function Home() {
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [speakingSection, setSpeakingSection] = useState<{ id: string; state: SpeakState } | null>(null);
+  const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
   const [generatingNext, setGeneratingNext] = useState(false);
 
   useEffect(() => {
@@ -125,8 +157,10 @@ export default function Home() {
     setSpeakingSection({ id, state: "loading" });
     await speak(text, {
       onPlaybackStart: () => setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current)),
+      onChunkStart: (index) => setActiveChunkIndex(index),
     });
     setSpeakingSection((current) => (current?.id === id ? null : current));
+    setActiveChunkIndex(null);
   }
 
   function togglePauseSection(id: string) {
@@ -147,6 +181,7 @@ export default function Home() {
   function stopSection(id: string) {
     stopSpeaking();
     setSpeakingSection((current) => (current?.id === id ? null : current));
+    setActiveChunkIndex(null);
   }
 
   async function readNext() {
@@ -329,7 +364,13 @@ export default function Home() {
                   As a Story
                 </button>
               </div>
-              <p className="text-sm leading-relaxed whitespace-pre-line">{passageText}</p>
+              {passageText && (
+                <HighlightedText
+                  text={passageText}
+                  isActiveSection={speakingSection?.id === "passage"}
+                  activeChunkIndex={activeChunkIndex}
+                />
+              )}
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
                 {contentLanguage === "en"
                   ? "NLT (New Living Translation)"
@@ -345,9 +386,11 @@ export default function Home() {
             onPauseToggle={() => togglePauseSection("story")}
             onStop={() => stopSection("story")}
           >
-            <p className="text-sm leading-relaxed whitespace-pre-line">
-              {pick(reading.storySummaryEn, reading.storySummary)}
-            </p>
+            <HighlightedText
+              text={pick(reading.storySummaryEn, reading.storySummary)}
+              isActiveSection={speakingSection?.id === "story"}
+              activeChunkIndex={activeChunkIndex}
+            />
           </Section>
 
           <Section
@@ -357,9 +400,11 @@ export default function Home() {
             onPauseToggle={() => togglePauseSection("context")}
             onStop={() => stopSection("context")}
           >
-            <p className="text-sm leading-relaxed whitespace-pre-line">
-              {pick(reading.historicalContextEn, reading.historicalContext)}
-            </p>
+            <HighlightedText
+              text={pick(reading.historicalContextEn, reading.historicalContext)}
+              isActiveSection={speakingSection?.id === "context"}
+              activeChunkIndex={activeChunkIndex}
+            />
           </Section>
 
           <Section
@@ -369,9 +414,11 @@ export default function Home() {
             onPauseToggle={() => togglePauseSection("message")}
             onStop={() => stopSection("message")}
           >
-            <p className="text-sm leading-relaxed whitespace-pre-line">
-              {pick(reading.personalMessageEn, reading.personalMessage)}
-            </p>
+            <HighlightedText
+              text={pick(reading.personalMessageEn, reading.personalMessage)}
+              isActiveSection={speakingSection?.id === "message"}
+              activeChunkIndex={activeChunkIndex}
+            />
           </Section>
 
           {worshipLink && (
