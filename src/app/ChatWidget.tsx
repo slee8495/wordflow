@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { pauseSpeaking, prefetchSpeech, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
+import { prefetchSpeech } from "@/lib/speak";
+import { usePlayback } from "./PlaybackProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
+
+function chatSourceId(messageId: string) {
+  return `chat-${messageId}`;
+}
 
 function messageText(message: UIMessage): string {
   return message.parts
@@ -25,47 +30,23 @@ function pickRecordingMimeType(): string | undefined {
 export function ChatWidget() {
   const { name } = useUser();
   const { t } = useUiLanguage();
+  const { sourceId, label, speakState, playText, pause, resume, stop } = usePlayback();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [speakingMessage, setSpeakingMessage] = useState<{
-    id: string;
-    state: "loading" | "playing" | "paused";
-  } | null>(null);
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
 
-  async function speakMessage(id: string, text: string) {
-    if (!text.trim()) return;
-    setSpeakingMessage({ id, state: "loading" });
-    await speak(text, {
-      onPlaybackStart: () => setSpeakingMessage((cur) => (cur?.id === id ? { id, state: "playing" } : cur)),
-    });
-    setSpeakingMessage((cur) => (cur?.id === id ? null : cur));
-  }
-
-  function togglePauseMessage(id: string) {
-    setSpeakingMessage((cur) => {
-      if (!cur || cur.id !== id) return cur;
-      if (cur.state === "playing") {
-        pauseSpeaking();
-        return { id, state: "paused" };
-      }
-      if (cur.state === "paused") {
-        resumeSpeaking();
-        return { id, state: "playing" };
-      }
-      return cur;
-    });
-  }
-
-  function stopMessage(id: string) {
-    stopSpeaking();
-    setSpeakingMessage((cur) => (cur?.id === id ? null : cur));
-  }
+  const speakMessage = useCallback(
+    (id: string, text: string) => {
+      if (!text.trim()) return;
+      playText(chatSourceId(id), text.slice(0, 60), text);
+    },
+    [playText],
+  );
 
   const handledReplyIds = useRef(new Set<string>());
   useEffect(() => {
@@ -76,12 +57,11 @@ export function ChatWidget() {
     if (!text) return;
     handledReplyIds.current.add(last.id);
     if (autoSpeak) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       speakMessage(last.id, text);
     } else {
       prefetchSpeech(text);
     }
-  }, [autoSpeak, status, messages]);
+  }, [autoSpeak, status, messages, speakMessage]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
@@ -135,7 +115,9 @@ export function ChatWidget() {
     <>
       {open && (
         <div
-          className="fixed bottom-20 right-4 z-20 flex h-[70vh] max-h-[560px] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] shadow-xl"
+          className={`fixed right-4 z-20 flex h-[70vh] max-h-[560px] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] shadow-xl ${
+            label ? "bottom-36" : "bottom-20"
+          }`}
           style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
@@ -174,7 +156,7 @@ export function ChatWidget() {
                   </div>
                   {message.role === "assistant" &&
                     messageText(message) &&
-                    (speakingMessage?.id !== message.id ? (
+                    (sourceId !== chatSourceId(message.id) ? (
                       <button
                         onClick={() => speakMessage(message.id, messageText(message))}
                         aria-label={t("chat.readThisReply")}
@@ -186,20 +168,16 @@ export function ChatWidget() {
                     ) : (
                       <span className="ml-1 inline-flex items-center gap-2 align-middle">
                         <button
-                          onClick={() => togglePauseMessage(message.id)}
-                          disabled={speakingMessage.state === "loading"}
-                          aria-label={speakingMessage.state === "paused" ? t("chat.resume") : t("chat.pause")}
-                          title={speakingMessage.state === "paused" ? t("chat.resume") : t("chat.pause")}
+                          onClick={() => (speakState === "paused" ? resume() : pause())}
+                          disabled={speakState === "loading"}
+                          aria-label={speakState === "paused" ? t("chat.resume") : t("chat.pause")}
+                          title={speakState === "paused" ? t("chat.resume") : t("chat.pause")}
                           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-50"
                         >
-                          {speakingMessage.state === "loading"
-                            ? "…"
-                            : speakingMessage.state === "paused"
-                              ? "▶️"
-                              : "⏸️"}
+                          {speakState === "loading" ? "…" : speakState === "paused" ? "▶️" : "⏸️"}
                         </button>
                         <button
-                          onClick={() => stopMessage(message.id)}
+                          onClick={stop}
                           aria-label={t("chat.stopListening")}
                           title={t("chat.stopListening")}
                           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
@@ -260,7 +238,9 @@ export function ChatWidget() {
 
       <button
         onClick={() => setOpen((o) => !o)}
-        className="fixed bottom-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--clay-deep)] text-xl text-[var(--paper-raised)] shadow-lg"
+        className={`fixed right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--clay-deep)] text-xl text-[var(--paper-raised)] shadow-lg ${
+          label ? "bottom-20" : "bottom-4"
+        }`}
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         aria-label={t("chat.toggle")}
       >

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
+import { useEffect, useMemo, useState } from "react";
+import { splitIntoChunks } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
 import {
@@ -12,10 +12,12 @@ import {
   readingActivityHeading,
   type UiStringKey,
 } from "@/lib/i18n";
+import { usePlayback } from "../PlaybackProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
 
 const LANG_KEY = "wordflow:lang";
+const READING_SOURCE_ID = "reading-passage";
 
 // Sequential magnitude color for the two headline meters (books touched, current book) — a
 // single clay hue, track uses a precomputed tint rather than alpha-over-paper (alpha blending
@@ -256,6 +258,7 @@ function BookGrid({
 export default function ReadingPage() {
   const { name, login } = useUser();
   const { uiLang, t } = useUiLanguage();
+  const { sourceId, speakState: globalSpeakState, activeChunkIndex: globalActiveChunkIndex, playText, pause, resume, stop } = usePlayback();
   const [nameInput, setNameInput] = useState("");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [subTab, setSubTab] = useState<"browse" | "progress">("browse");
@@ -264,53 +267,16 @@ export default function ReadingPage() {
   const [passageText, setPassageText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UiStringKey | null>(null);
-  const [speakState, setSpeakState] = useState<"loading" | "playing" | "paused" | null>(null);
-  const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
-  // Guards against a stale speakPassage() call's cleanup running after a newer one (e.g. clicking
-  // a different sentence mid-playback) has already taken over — see speak.ts's own playToken for
-  // the same pattern at the audio layer; this is the same idea one level up, for React state.
-  const speakGenRef = useRef(0);
+
+  const isSpeakingThisPassage = sourceId === READING_SOURCE_ID;
+  const speakState = isSpeakingThisPassage ? globalSpeakState : null;
+  const activeChunkIndex = isSpeakingThisPassage ? globalActiveChunkIndex : null;
 
   const passageChunks = useMemo(() => (passageText ? splitIntoChunks(passageText) : []), [passageText]);
 
-  async function speakPassage(startIndex?: number) {
+  function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
-    const gen = ++speakGenRef.current;
-    setSpeakState("loading");
-    await speak(passageText, {
-      onPlaybackStart: () => {
-        if (speakGenRef.current !== gen) return;
-        setSpeakState((cur) => (cur ? "playing" : cur));
-      },
-      onChunkStart: (index) => {
-        if (speakGenRef.current !== gen) return;
-        setActiveChunkIndex(index);
-      },
-      startIndex,
-    });
-    if (speakGenRef.current !== gen) return; // a newer speakPassage() call superseded this one
-    setSpeakState(null);
-    setActiveChunkIndex(null);
-  }
-
-  function togglePausePassage() {
-    setSpeakState((cur) => {
-      if (cur === "playing") {
-        pauseSpeaking();
-        return "paused";
-      }
-      if (cur === "paused") {
-        resumeSpeaking();
-        return "playing";
-      }
-      return cur;
-    });
-  }
-
-  function stopPassage() {
-    stopSpeaking();
-    setSpeakState(null);
-    setActiveChunkIndex(null);
+    playText(READING_SOURCE_ID, `${selectedBook} ${selectedChapter}`, passageText, startIndex);
   }
 
   useEffect(() => {
@@ -320,13 +286,11 @@ export default function ReadingPage() {
 
   useEffect(() => {
     if (!selectedBook || !selectedChapter || !name) return;
-    stopSpeaking();
+    if (isSpeakingThisPassage) stop();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     setPassageText(null);
-    setSpeakState(null);
-    setActiveChunkIndex(null);
     fetch(
       `/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}&name=${encodeURIComponent(name)}`,
     )
@@ -337,6 +301,9 @@ export default function ReadingPage() {
       .then(({ content }) => setPassageText(content))
       .catch(() => setError("errors.loadPassage"))
       .finally(() => setLoading(false));
+    // isSpeakingThisPassage/stop deliberately excluded — this should only re-run on book/chapter/
+    // lang/name changes, not every time global playback state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBook, selectedChapter, contentLanguage, name]);
 
   function setLanguage(lang: "ko" | "en") {
@@ -479,14 +446,14 @@ export default function ReadingPage() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={togglePausePassage}
+                      onClick={() => (speakState === "paused" ? resume() : pause())}
                       disabled={speakState === "loading"}
                       className="text-base disabled:opacity-50"
                       aria-label={speakState === "paused" ? t("reading.resume") : t("reading.pause")}
                     >
                       {speakState === "loading" ? "…" : speakState === "paused" ? "▶️" : "⏸️"}
                     </button>
-                    <button onClick={stopPassage} className="text-base" aria-label={t("reading.stop")}>
+                    <button onClick={stop} className="text-base" aria-label={t("reading.stop")}>
                       ⏹️
                     </button>
                   </div>

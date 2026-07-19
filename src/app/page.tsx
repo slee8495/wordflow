@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
+import { useEffect, useState } from "react";
+import { splitIntoChunks } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
+import { usePlayback } from "./PlaybackProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
 
 const LANG_KEY = "wordflow:lang";
+const sectionSourceId = (id: string) => `today-${id}`;
 
 type WorshipLink = { title: string; url: string };
 type Reading = {
@@ -125,6 +127,7 @@ function Section({
 export default function Home() {
   const { name, login, logout } = useUser();
   const { uiLang, t } = useUiLanguage();
+  const { sourceId, speakState: globalSpeakState, activeChunkIndex, playText, pause, resume, stop } = usePlayback();
   const [nameInput, setNameInput] = useState("");
   const [readings, setReadings] = useState<Reading[]>([]);
   const [index, setIndex] = useState(0);
@@ -132,13 +135,11 @@ export default function Home() {
   const [error, setError] = useState<UiStringKey | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
-  const [speakingSection, setSpeakingSection] = useState<{ id: string; state: SpeakState } | null>(null);
-  const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
   const [generatingNext, setGeneratingNext] = useState(false);
-  // Guards against a stale speakSection() call's cleanup running after a newer one (e.g. clicking
-  // a different sentence, even within the same section) has already taken over — mirrors
-  // speak.ts's own playToken at the audio layer, one level up for React state.
-  const speakGenRef = useRef(0);
+
+  function speakingSectionFor(id: string): { id: string; state: SpeakState } | null {
+    return sourceId === sectionSourceId(id) && globalSpeakState ? { id, state: globalSpeakState } : null;
+  }
 
   useEffect(() => {
     const storedLang = localStorage.getItem(LANG_KEY);
@@ -170,45 +171,9 @@ export default function Home() {
     localStorage.setItem(LANG_KEY, lang);
   }
 
-  async function speakSection(id: string, text: string | null, startIndex?: number) {
+  function speakSection(id: string, label: string, text: string | null, startIndex?: number) {
     if (!text?.trim()) return;
-    const gen = ++speakGenRef.current;
-    setSpeakingSection({ id, state: "loading" });
-    await speak(text, {
-      onPlaybackStart: () => {
-        if (speakGenRef.current !== gen) return;
-        setSpeakingSection((current) => (current?.id === id ? { id, state: "playing" } : current));
-      },
-      onChunkStart: (index) => {
-        if (speakGenRef.current !== gen) return;
-        setActiveChunkIndex(index);
-      },
-      startIndex,
-    });
-    if (speakGenRef.current !== gen) return; // a newer speakSection() call superseded this one
-    setSpeakingSection((current) => (current?.id === id ? null : current));
-    setActiveChunkIndex(null);
-  }
-
-  function togglePauseSection(id: string) {
-    setSpeakingSection((current) => {
-      if (!current || current.id !== id) return current;
-      if (current.state === "playing") {
-        pauseSpeaking();
-        return { id, state: "paused" };
-      }
-      if (current.state === "paused") {
-        resumeSpeaking();
-        return { id, state: "playing" };
-      }
-      return current;
-    });
-  }
-
-  function stopSection(id: string) {
-    stopSpeaking();
-    setSpeakingSection((current) => (current?.id === id ? null : current));
-    setActiveChunkIndex(null);
+    playText(sectionSourceId(id), label, text, startIndex);
   }
 
   async function readNext() {
@@ -360,17 +325,19 @@ export default function Home() {
 
           <Section
             title={t("today.contextTitle")}
-            onSpeak={() => speakSection("context", pick(reading.historicalContextEn, reading.historicalContext))}
-            speakState={speakingSection?.id === "context" ? speakingSection.state : null}
-            onPauseToggle={() => togglePauseSection("context")}
-            onStop={() => stopSection("context")}
+            onSpeak={() =>
+              speakSection("context", t("today.contextTitle"), pick(reading.historicalContextEn, reading.historicalContext))
+            }
+            speakState={speakingSectionFor("context")?.state ?? null}
+            onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
+            onStop={stop}
           >
             <HighlightedText
               text={pick(reading.historicalContextEn, reading.historicalContext)}
-              isActiveSection={speakingSection?.id === "context"}
+              isActiveSection={sourceId === sectionSourceId("context")}
               activeChunkIndex={activeChunkIndex}
               onSentenceClick={(i) =>
-                speakSection("context", pick(reading.historicalContextEn, reading.historicalContext), i)
+                speakSection("context", t("today.contextTitle"), pick(reading.historicalContextEn, reading.historicalContext), i)
               }
             />
           </Section>
@@ -379,10 +346,10 @@ export default function Home() {
             <Section
               title={t("today.passageTitle")}
               subtitle={rangeLabel}
-              onSpeak={() => speakSection("passage", passageText ?? null)}
-              speakState={speakingSection?.id === "passage" ? speakingSection.state : null}
-              onPauseToggle={() => togglePauseSection("passage")}
-              onStop={() => stopSection("passage")}
+              onSpeak={() => speakSection("passage", t("today.passageTitle"), passageText ?? null)}
+              speakState={speakingSectionFor("passage")?.state ?? null}
+              onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
+              onStop={stop}
             >
               <div className="mb-2 flex gap-1.5">
                 <button
@@ -409,9 +376,9 @@ export default function Home() {
               {passageText && (
                 <HighlightedText
                   text={passageText}
-                  isActiveSection={speakingSection?.id === "passage"}
+                  isActiveSection={sourceId === sectionSourceId("passage")}
                   activeChunkIndex={activeChunkIndex}
-                  onSentenceClick={(i) => speakSection("passage", passageText, i)}
+                  onSentenceClick={(i) => speakSection("passage", t("today.passageTitle"), passageText, i)}
                 />
               )}
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
@@ -426,17 +393,19 @@ export default function Home() {
 
           <Section
             title={t("today.messageTitle")}
-            onSpeak={() => speakSection("message", pick(reading.personalMessageEn, reading.personalMessage))}
-            speakState={speakingSection?.id === "message" ? speakingSection.state : null}
-            onPauseToggle={() => togglePauseSection("message")}
-            onStop={() => stopSection("message")}
+            onSpeak={() =>
+              speakSection("message", t("today.messageTitle"), pick(reading.personalMessageEn, reading.personalMessage))
+            }
+            speakState={speakingSectionFor("message")?.state ?? null}
+            onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
+            onStop={stop}
           >
             <HighlightedText
               text={pick(reading.personalMessageEn, reading.personalMessage)}
-              isActiveSection={speakingSection?.id === "message"}
+              isActiveSection={sourceId === sectionSourceId("message")}
               activeChunkIndex={activeChunkIndex}
               onSentenceClick={(i) =>
-                speakSection("message", pick(reading.personalMessageEn, reading.personalMessage), i)
+                speakSection("message", t("today.messageTitle"), pick(reading.personalMessageEn, reading.personalMessage), i)
               }
             />
           </Section>
