@@ -1,27 +1,37 @@
 // Client-side helper for reading reply/reading text aloud. Prefers the neural /api/speak voice
 // (AI Gateway TTS) and falls back to the browser's built-in Web Speech API if that request
-// fails (offline, cold start, etc).
+// fails entirely (offline, cold start, etc).
 //
-// Two things this file exists to solve:
-// 1. TTS generation time scales with text length, so a long passage took several seconds
-//    before any sound played. Text is split into sentence-sized chunks that are all fetched
-//    in parallel but played back in order — the first chunk is usually ready in ~1-2s, and
-//    later chunks keep generating in the background while earlier ones are still playing.
-// 2. Overlapping playback ("multiple voices at once"): if a new speak() call comes in while
-//    a previous one is still waiting on generation, the old call would eventually finish and
-//    start playing right on top of the new one. A monotonic token invalidates any in-flight
-//    call as soon as a newer one starts, so stale audio never gets played.
-const audioUrlCache = new Map<string, string>();
-const inFlight = new Map<string, Promise<string | null>>();
-// Reused across every chunk in (and across) a playback session instead of a fresh `new Audio()`
-// per chunk. Mobile browsers grant "keep playing while backgrounded/locked" permission to the
-// specific element a user gesture started — swapping this element's `src` stays inside that
-// grant, whereas creating a new element for each sentence generally does not, which is why
-// playback used to stop dead at the sentence you were on the moment you backgrounded the app.
+// Every requested chunk's audio is fetched, measured, and concatenated into ONE continuous file
+// before playback starts, rather than chained via a separate play() call per sentence. Mobile
+// browsers only reliably honor background/screen-lock playback for a single ongoing session
+// started by a user gesture — calling play() again for a new source mid-session (even reusing
+// the same <audio> element) can silently fail once the app is actually backgrounded, which
+// showed up as playback either stopping dead or racing through the remaining sentences almost
+// instantly. A single native playback from one gesture-started element sidesteps that.
+//
+// The tradeoff: since concatenation needs every chunk's bytes up front, playback can't start
+// until all of them are ready — slower to first sound than playing chunk 0 the moment it lands,
+// but chunks are still fetched in parallel, so the wait is bounded by the slowest one, not the
+// sum of all of them.
+//
+// Overlapping playback ("multiple voices at once"): if a new speak() call comes in while a
+// previous one is still preparing, the old call would eventually finish and start playing right
+// on top of the new one. A monotonic token invalidates any in-flight call as soon as a newer one
+// starts, so stale audio never gets played.
+const audioBufferCache = new Map<string, ArrayBuffer>();
+const inFlight = new Map<string, Promise<ArrayBuffer | null>>();
+// Reused across sessions instead of a fresh `new Audio()` every time — see the file header for
+// why a single gesture-started element matters for background playback.
 let currentAudio: HTMLAudioElement | null = null;
-// Resolver for the playAudio() promise currently in flight, if any — stopSpeaking() uses this to
-// unblock a hung await immediately (see the comment on playAudio for why that's necessary).
-let currentStopResolve: ((finished: boolean) => void) | null = null;
+// Resolves the playback promise currently in flight, if any — stopSpeaking() uses this to
+// unblock a hung await immediately instead of waiting on an event that may never fire.
+let currentStopResolve: (() => void) | null = null;
+// Detaches the current session's event listeners — stopSpeaking() calls this directly so a
+// superseded session's 'ended'/'timeupdate' handlers (closing over its own stale offsets/opts)
+// can't keep firing into the next session once it reuses the same <audio> element.
+let activeCleanup: (() => void) | null = null;
+let activeObjectUrl: string | null = null;
 let playToken = 0;
 
 const MAX_CHUNK_LENGTH = 200;
@@ -51,27 +61,23 @@ function speakWithBrowserVoice(text: string, onStart?: () => void) {
   window.speechSynthesis.speak(utterance);
 }
 
-// A hard stop: abandons whatever's currently playing/loading and unblocks speak()'s awaited
-// playAudio() promise (see playAudio) so a caller's `await speak(...)` reliably returns instead
-// of hanging forever on a clip that's paused-but-never-ending. Bumping playToken makes the
-// unblocked loop iteration take the `token !== playToken` exit instead of falling through to the
-// "did it finish cleanly" fallback check.
+// A hard stop: abandons whatever's currently playing/preparing and unblocks speak()'s awaited
+// promise so a caller's `await speak(...)` reliably returns instead of hanging forever.
 export function stopSpeaking() {
   playToken++;
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-  }
+  activeCleanup?.();
+  activeCleanup = null;
+  currentAudio?.pause();
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
-  currentStopResolve?.(false);
+  currentStopResolve?.();
   currentStopResolve = null;
 }
 
-// A soft pause: unlike stopSpeaking(), deliberately does NOT resolve the in-flight playAudio()
-// promise or touch playToken — the sequence should stay suspended on the current clip and pick
-// back up via resumeSpeaking(), not jump to the next chunk or fall back to the browser voice.
+// A soft pause: unlike stopSpeaking(), deliberately does NOT resolve the in-flight playback
+// promise or touch playToken — the sequence should stay suspended where it is and pick back up
+// via resumeSpeaking(), not jump ahead or fall back to the browser voice.
 export function pauseSpeaking() {
   currentAudio?.pause();
   if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
@@ -86,8 +92,8 @@ export function resumeSpeaking() {
   }
 }
 
-function fetchAudioUrl(text: string): Promise<string | null> {
-  const cached = audioUrlCache.get(text);
+function fetchAudioBuffer(text: string): Promise<ArrayBuffer | null> {
+  const cached = audioBufferCache.get(text);
   if (cached) return Promise.resolve(cached);
 
   const pending = inFlight.get(text);
@@ -96,12 +102,11 @@ function fetchAudioUrl(text: string): Promise<string | null> {
   const promise = fetch(`/api/speak?text=${encodeURIComponent(text)}`)
     .then((res) => {
       if (!res.ok) throw new Error("tts request failed");
-      return res.blob();
+      return res.arrayBuffer();
     })
-    .then((blob) => {
-      const url = URL.createObjectURL(blob);
-      audioUrlCache.set(text, url);
-      return url;
+    .then((buffer) => {
+      audioBufferCache.set(text, buffer);
+      return buffer;
     })
     .catch(() => null)
     .finally(() => inFlight.delete(text));
@@ -110,43 +115,30 @@ function fetchAudioUrl(text: string): Promise<string | null> {
   return promise;
 }
 
-// Plays one clip and resolves once it *actually* finishes (or errors). Deliberately does NOT
-// treat a bare "pause" event as completion — a pause can fire for reasons that have nothing to
-// do with the clip being done (OS media-session interruptions, tab backgrounding, screen lock,
-// or a user-initiated pauseSpeaking()), and treating those as "finished" was making playback
-// silently skip ahead or stop partway through a reply. Instead the promise just sits until
-// either the clip actually ends/errors, or stopSpeaking() forces it via currentStopResolve.
-function playAudio(url: string, onStart?: () => void): Promise<boolean> {
+// Measures a chunk's playback duration via a throwaway <audio> element — used to build the
+// cumulative time offsets that drive activeChunkIndex off real playback position (see speak()).
+function measureDuration(buffer: ArrayBuffer): Promise<number> {
   return new Promise((resolve) => {
-    const audio = currentAudio ?? new Audio();
-    currentAudio = audio;
-    currentStopResolve = resolve;
-
-    const onPlaying = () => onStart?.();
-    const onEnded = () => settle(true);
-    const onError = () => settle(false);
-    function settle(finished: boolean) {
-      audio.removeEventListener("playing", onPlaying);
-      audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("error", onError);
-      currentStopResolve = null;
-      resolve(finished);
-    }
-
-    audio.addEventListener("playing", onPlaying, { once: true });
-    audio.addEventListener("ended", onEnded, { once: true });
-    audio.addEventListener("error", onError, { once: true });
-    audio.src = url;
-    audio.play().catch(() => settle(false));
+    const url = URL.createObjectURL(new Blob([buffer], { type: "audio/mpeg" }));
+    const probe = new Audio();
+    const cleanup = () => {
+      probe.removeEventListener("loadedmetadata", onLoaded);
+      probe.removeEventListener("error", onErr);
+      URL.revokeObjectURL(url);
+    };
+    const onLoaded = () => {
+      const duration = Number.isFinite(probe.duration) ? probe.duration : 0;
+      cleanup();
+      resolve(duration);
+    };
+    const onErr = () => {
+      cleanup();
+      resolve(0);
+    };
+    probe.addEventListener("loadedmetadata", onLoaded, { once: true });
+    probe.addEventListener("error", onErr, { once: true });
+    probe.src = url;
   });
-}
-
-// Fire-and-forget: warms the cache without playing anything.
-export function prefetchSpeech(text: string) {
-  if (!text.trim()) return;
-  for (const chunk of splitIntoChunks(text)) {
-    void fetchAudioUrl(chunk);
-  }
 }
 
 export async function speak(
@@ -159,38 +151,84 @@ export async function speak(
 
   const chunks = splitIntoChunks(text);
   const startIndex = Math.min(Math.max(opts.startIndex ?? 0, 0), Math.max(chunks.length - 1, 0));
-  // Kick off every chunk's fetch immediately (from startIndex on — clicking ahead into a passage
-  // shouldn't generate audio for sentences the listener is skipping past) so later ones generate
-  // while earlier ones play.
-  const urlPromises = chunks.map((chunk, i) => (i >= startIndex ? fetchAudioUrl(chunk) : null));
-  // Only the very first chunk's playback start should notify the caller — later chunks continue
-  // the same "playing" session seamlessly.
-  let announced = false;
-  const announceStart = () => {
-    if (announced) return;
-    announced = true;
-    opts.onPlaybackStart?.();
-  };
+  const requested = chunks.slice(startIndex);
 
-  for (let i = startIndex; i < urlPromises.length; i++) {
-    if (token !== playToken) return; // a newer speak() call, or an explicit stop, superseded this one
-    const url = await urlPromises[i];
-    if (token !== playToken) return;
+  const buffers = await Promise.all(requested.map((chunk) => fetchAudioBuffer(chunk)));
+  if (token !== playToken) return;
 
-    if (!url) {
-      opts.onChunkStart?.(i);
-      speakWithBrowserVoice(chunks.slice(i).join(" "), announceStart);
-      return;
-    }
-    const finishedCleanly = await playAudio(url, () => {
-      announceStart();
-      opts.onChunkStart?.(i);
+  // Chunks that failed to generate are quietly skipped from the combined file rather than
+  // derailing the whole passage into the browser voice over one flaky request — only a total
+  // outage (every chunk failed) falls back to reading everything requested via speechSynthesis.
+  const ok: { buffer: ArrayBuffer; index: number }[] = [];
+  buffers.forEach((buffer, i) => {
+    if (buffer) ok.push({ buffer, index: startIndex + i });
+  });
+
+  if (ok.length === 0) {
+    speakWithBrowserVoice(requested.join(" "), () => {
+      opts.onChunkStart?.(startIndex);
+      opts.onPlaybackStart?.();
     });
-    if (token !== playToken) return;
-    if (!finishedCleanly) {
-      opts.onChunkStart?.(i + 1);
-      speakWithBrowserVoice(chunks.slice(i + 1).join(" "), announceStart);
-      return;
-    }
+    return;
   }
+
+  const durations = await Promise.all(ok.map((c) => measureDuration(c.buffer)));
+  if (token !== playToken) return;
+
+  const url = URL.createObjectURL(new Blob(ok.map((c) => c.buffer), { type: "audio/mpeg" }));
+  if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
+  activeObjectUrl = url;
+
+  // Cumulative start time (seconds) for each included chunk, paired with its real index into
+  // `chunks` (not its position in `ok`, since failed chunks were dropped).
+  let cursor = 0;
+  const offsets = ok.map((c, i) => {
+    const start = cursor;
+    cursor += durations[i];
+    return { start, index: c.index };
+  });
+
+  const audio = currentAudio ?? new Audio();
+  currentAudio = audio;
+
+  await new Promise<void>((resolve) => {
+    currentStopResolve = resolve;
+
+    let announced = false;
+    const onPlaying = () => {
+      if (announced) return;
+      announced = true;
+      opts.onPlaybackStart?.();
+      opts.onChunkStart?.(offsets[0].index);
+    };
+    const onTimeUpdate = () => {
+      const t = audio.currentTime;
+      let current = offsets[0].index;
+      for (const o of offsets) {
+        if (t >= o.start) current = o.index;
+        else break;
+      }
+      opts.onChunkStart?.(current);
+    };
+    const onEnded = () => finish();
+    const onError = () => finish();
+    function finish() {
+      audio.removeEventListener("playing", onPlaying);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      activeCleanup = null;
+      currentStopResolve = null;
+      resolve();
+    }
+    activeCleanup = finish;
+
+    audio.addEventListener("playing", onPlaying);
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+
+    audio.src = url;
+    audio.play().catch(() => finish());
+  });
 }
