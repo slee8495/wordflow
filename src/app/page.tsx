@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
+import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
+import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
 
 const LANG_KEY = "wordflow:lang";
@@ -111,11 +113,12 @@ function Section({
 
 export default function Home() {
   const { name, login, logout } = useUser();
+  const { uiLang, t } = useUiLanguage();
   const [nameInput, setNameInput] = useState("");
   const [readings, setReadings] = useState<Reading[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UiStringKey | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [speakingSection, setSpeakingSection] = useState<{ id: string; state: SpeakState } | null>(null);
@@ -143,7 +146,7 @@ export default function Home() {
         setReadings(readings);
         setIndex(readings.length - 1);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch(() => setError("errors.loadToday"))
       .finally(() => setLoading(false));
   }, [name]);
 
@@ -199,14 +202,14 @@ export default function Home() {
       setReadings((current) => [...current, reading]);
       setIndex((current) => current + 1);
       setPassageView("verses");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch {
+      setError("errors.loadNext");
     } finally {
       setGeneratingNext(false);
     }
   }
 
-  const todayLabel = new Intl.DateTimeFormat("en-US", {
+  const todayLabel = new Intl.DateTimeFormat(uiLang === "ko" ? "ko-KR" : "en-US", {
     timeZone: "America/Los_Angeles",
     weekday: "long",
     month: "long",
@@ -224,18 +227,18 @@ export default function Home() {
           login(nameInput);
         }}
       >
-        <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>
+        <p className="text-sm text-[var(--ink-soft)]">{t("login.prompt")}</p>
         <input
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
-          placeholder="Name"
+          placeholder={t("login.namePlaceholder")}
           className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
         />
         <button
           type="submit"
           className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
         >
-          Start
+          {t("login.start")}
         </button>
       </form>
     );
@@ -290,7 +293,7 @@ export default function Home() {
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[var(--ink-soft)]">Hi {name} — today&apos;s reading</span>
+        <span className="text-sm text-[var(--ink-soft)]">{greeting(uiLang, name)}</span>
         <button
           onClick={() => {
             logout();
@@ -298,12 +301,12 @@ export default function Home() {
           }}
           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
         >
-          Change name
+          {t("today.changeName")}
         </button>
       </div>
 
-      {loading && <p className="text-sm text-[var(--ink-soft)]">Preparing today&apos;s reading…</p>}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {loading && <p className="text-sm text-[var(--ink-soft)]">{t("today.preparing")}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>}
 
       {readings.length > 1 && (
         <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] px-3 py-2">
@@ -312,17 +315,15 @@ export default function Home() {
             disabled={index === 0}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
-            ← Previous passage
+            ← {t("today.previousPassage")}
           </button>
-          <span className="text-xs text-[var(--ink-soft)]">
-            Passage {index + 1} of {readings.length} today
-          </span>
+          <span className="text-xs text-[var(--ink-soft)]">{passageOfLabel(uiLang, index + 1, readings.length)}</span>
           <button
             onClick={() => setIndex((i) => Math.min(readings.length - 1, i + 1))}
             disabled={index === readings.length - 1}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
-            Next passage →
+            {t("today.nextPassage")} →
           </button>
         </div>
       )}
@@ -335,7 +336,7 @@ export default function Home() {
 
           {(reading.passageTextKoVerses || reading.passageTextKoStory || reading.passageTextEn) && (
             <Section
-              title="Today's Passage"
+              title={t("today.passageTitle")}
               subtitle={rangeLabel}
               onSpeak={() => speakSection("passage", passageText ?? null)}
               speakState={speakingSection?.id === "passage" ? speakingSection.state : null}
@@ -351,7 +352,7 @@ export default function Home() {
                       : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
                   }`}
                 >
-                  By Verse
+                  {t("today.byVerse")}
                 </button>
                 <button
                   onClick={() => setPassageView("story")}
@@ -361,7 +362,7 @@ export default function Home() {
                       : "bg-[var(--clay-tint)] text-[var(--ink-soft)]"
                   }`}
                 >
-                  As a Story
+                  {t("today.asStory")}
                 </button>
               </div>
               {passageText && (
@@ -373,14 +374,16 @@ export default function Home() {
               )}
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
                 {contentLanguage === "en"
-                  ? "NLT (New Living Translation)"
+                  ? passageView === "story"
+                    ? "AI-adapted into story form, based on the NLT (New Living Translation)"
+                    : "NLT (New Living Translation)"
                   : "AI가 영어 NLT 성경을 바탕으로 쉬운 한글로 다시 표현한 본문이에요 (개역개정 등 특정 번역본이 아니에요)."}
               </p>
             </Section>
           )}
 
           <Section
-            title="Today's Story"
+            title={t("today.storyTitle")}
             onSpeak={() => speakSection("story", pick(reading.storySummaryEn, reading.storySummary))}
             speakState={speakingSection?.id === "story" ? speakingSection.state : null}
             onPauseToggle={() => togglePauseSection("story")}
@@ -394,7 +397,7 @@ export default function Home() {
           </Section>
 
           <Section
-            title="Context & Background"
+            title={t("today.contextTitle")}
             onSpeak={() => speakSection("context", pick(reading.historicalContextEn, reading.historicalContext))}
             speakState={speakingSection?.id === "context" ? speakingSection.state : null}
             onPauseToggle={() => togglePauseSection("context")}
@@ -408,7 +411,7 @@ export default function Home() {
           </Section>
 
           <Section
-            title="Today's Message"
+            title={t("today.messageTitle")}
             onSpeak={() => speakSection("message", pick(reading.personalMessageEn, reading.personalMessage))}
             speakState={speakingSection?.id === "message" ? speakingSection.state : null}
             onPauseToggle={() => togglePauseSection("message")}
@@ -422,7 +425,7 @@ export default function Home() {
           </Section>
 
           {worshipLink && (
-            <Section title="Worship">
+            <Section title={t("today.worshipTitle")}>
               <a
                 href={worshipLink.url}
                 target="_blank"
@@ -440,7 +443,7 @@ export default function Home() {
               disabled={generatingNext}
               className="rounded-lg border border-dashed border-[var(--line)] px-3 py-2 text-sm text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
             >
-              {generatingNext ? "Generating…" : "Done for today — read the next passage →"}
+              {generatingNext ? t("today.generating") : t("today.doneReadNext")}
             </button>
           )}
         </>

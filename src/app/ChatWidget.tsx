@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { pauseSpeaking, prefetchSpeech, resumeSpeaking, speak, stopSpeaking } from "@/lib/speak";
+import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
 
 function messageText(message: UIMessage): string {
@@ -23,6 +24,7 @@ function pickRecordingMimeType(): string | undefined {
 
 export function ChatWidget() {
   const { name } = useUser();
+  const { t } = useUiLanguage();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -137,13 +139,13 @@ export function ChatWidget() {
           style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-            <span className="text-sm font-semibold">🤖 말씀·교회 Q&A</span>
+            <span className="text-sm font-semibold">{t("chat.title")}</span>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setAutoSpeak((v) => !v)}
                 aria-pressed={autoSpeak}
-                aria-label="답변 읽어주기"
-                title="답변 읽어주기"
+                aria-label={t("chat.readAloudToggle")}
+                title={t("chat.readAloudToggle")}
                 className={`text-base ${autoSpeak ? "" : "opacity-40"}`}
               >
                 {autoSpeak ? "🔊" : "🔇"}
@@ -155,11 +157,7 @@ export function ChatWidget() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-3">
-            {messages.length === 0 && (
-              <p className="text-sm text-[var(--ink-soft)]">
-                &quot;오늘 본문 다시 설명해줘&quot;, &quot;위로가 되는 찬양 추천해줘&quot;, &quot;What does this passage mean?&quot;처럼 물어보세요.
-              </p>
-            )}
+            {messages.length === 0 && <p className="text-sm text-[var(--ink-soft)]">{t("chat.emptyHint")}</p>}
             <div className="flex flex-col gap-3">
               {messages.map((message) => (
                 <div key={message.id} className={message.role === "user" ? "text-right" : "text-left"}>
@@ -179,8 +177,8 @@ export function ChatWidget() {
                     (speakingMessage?.id !== message.id ? (
                       <button
                         onClick={() => speakMessage(message.id, messageText(message))}
-                        aria-label="이 답변 읽어주기"
-                        title="읽어주기"
+                        aria-label={t("chat.readThisReply")}
+                        title={t("chat.listen")}
                         className="ml-1 align-middle text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
                       >
                         🔊
@@ -190,8 +188,8 @@ export function ChatWidget() {
                         <button
                           onClick={() => togglePauseMessage(message.id)}
                           disabled={speakingMessage.state === "loading"}
-                          aria-label={speakingMessage.state === "paused" ? "이어 듣기" : "일시정지"}
-                          title={speakingMessage.state === "paused" ? "이어 듣기" : "일시정지"}
+                          aria-label={speakingMessage.state === "paused" ? t("chat.resume") : t("chat.pause")}
+                          title={speakingMessage.state === "paused" ? t("chat.resume") : t("chat.pause")}
                           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-50"
                         >
                           {speakingMessage.state === "loading"
@@ -202,8 +200,8 @@ export function ChatWidget() {
                         </button>
                         <button
                           onClick={() => stopMessage(message.id)}
-                          aria-label="그만 듣기"
-                          title="그만 듣기"
+                          aria-label={t("chat.stopListening")}
+                          title={t("chat.stopListening")}
                           className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
                         >
                           ⏹️
@@ -212,7 +210,7 @@ export function ChatWidget() {
                     ))}
                 </div>
               ))}
-              {status === "submitted" && <div className="text-sm text-[var(--ink-soft)]">생각 중…</div>}
+              {status === "submitted" && <div className="text-sm text-[var(--ink-soft)]">{t("chat.thinking")}</div>}
             </div>
           </div>
 
@@ -229,7 +227,9 @@ export function ChatWidget() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={status !== "ready"}
-              placeholder={recording ? "듣고 있어요…" : transcribing ? "변환 중…" : "질문을 입력하세요…"}
+              placeholder={
+                recording ? t("chat.inputListening") : transcribing ? t("chat.inputTranscribing") : t("chat.inputPlaceholder")
+              }
               className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
             />
             <button
@@ -237,8 +237,8 @@ export function ChatWidget() {
               onClick={() => (recording ? stopRecording() : startRecording())}
               disabled={status !== "ready" || transcribing}
               aria-pressed={recording}
-              aria-label={recording ? "녹음 중지" : "음성으로 질문하기"}
-              title={recording ? "녹음 중지" : "음성으로 질문하기"}
+              aria-label={recording ? t("chat.stopRecording") : t("chat.askByVoice")}
+              title={recording ? t("chat.stopRecording") : t("chat.askByVoice")}
               className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-40 ${
                 recording
                   ? "bg-red-600 text-white"
@@ -252,7 +252,7 @@ export function ChatWidget() {
               disabled={status !== "ready"}
               className="rounded-lg bg-[var(--clay-deep)] px-3 py-1.5 text-sm font-medium text-[var(--paper-raised)] disabled:opacity-40"
             >
-              전송
+              {t("chat.send")}
             </button>
           </form>
         </div>
@@ -262,7 +262,7 @@ export function ChatWidget() {
         onClick={() => setOpen((o) => !o)}
         className="fixed bottom-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--clay-deep)] text-xl text-[var(--paper-raised)] shadow-lg"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-        aria-label="Chat"
+        aria-label={t("chat.toggle")}
       >
         {open ? "✕" : "🤖"}
       </button>

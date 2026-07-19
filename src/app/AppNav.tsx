@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useUiLanguage } from "./UiLanguageProvider";
 
 const TABS = [
-  { href: "/", label: "Today" },
-  { href: "/reading", label: "Reading" },
-];
+  { href: "/", key: "nav.today" },
+  { href: "/reading", key: "nav.reading" },
+] as const;
 
 export function AppNav() {
   const pathname = usePathname();
+  const { t } = useUiLanguage();
 
   return (
     <nav className="flex gap-1">
@@ -25,7 +27,7 @@ export function AppNav() {
                 : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
             }`}
           >
-            {tab.label}
+            {t(tab.key)}
           </Link>
         );
       })}

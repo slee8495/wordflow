@@ -4,6 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { pauseSpeaking, resumeSpeaking, speak, splitIntoChunks, stopSpeaking } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
+import {
+  booksTouchedSublabel,
+  chaptersSublabel,
+  currentlyIn,
+  listenToAria,
+  readingActivityHeading,
+  type UiStringKey,
+} from "@/lib/i18n";
+import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
 
 const LANG_KEY = "wordflow:lang";
@@ -92,16 +101,19 @@ function BookBar({
   );
 }
 
-const SCOPE_OPTIONS: { label: string; scope: ProgressScope }[] = [
-  { label: "This cycle", scope: "cycle" },
-  { label: "All time", scope: "all" },
+const SCOPE_OPTIONS: { key: UiStringKey; scope: ProgressScope }[] = [
+  { key: "progress.thisCycle", scope: "cycle" },
+  { key: "progress.allTime", scope: "all" },
 ];
 
+// `lang` is the Bible content language (drives book-name abbreviations only); the UI chrome
+// below follows the separate app-wide UI language from useUiLanguage().
 function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) {
+  const { uiLang, t } = useUiLanguage();
   const [scope, setScope] = useState<ProgressScope>("cycle");
   const [progress, setProgress] = useState<ProgressPayload | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UiStringKey | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -113,12 +125,12 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
         return res.json();
       })
       .then(({ progress }) => setProgress(progress))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch(() => setError("errors.loadProgress"))
       .finally(() => setLoading(false));
   }, [name, scope]);
 
-  if (loading && !progress) return <p className="text-sm text-[var(--ink-soft)]">Loading progress…</p>;
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (loading && !progress) return <p className="text-sm text-[var(--ink-soft)]">{t("progress.loading")}</p>;
+  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>;
   if (!progress) return null;
 
   const abbrev = lang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
@@ -127,16 +139,16 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
-        <StatTile icon="🔄" label="Cycles completed" value={String(progress.cycleCount)} />
+        <StatTile icon="🔄" label={t("progress.cyclesCompleted")} value={String(progress.cycleCount)} />
         <StatTile
           icon="🗓️"
-          label="Projected completion"
-          value={progress.projectedCompletionDate ?? "Not enough data yet"}
+          label={t("progress.projectedCompletion")}
+          value={progress.projectedCompletionDate ?? t("progress.notEnoughData")}
         />
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-[var(--ink-soft)]">Showing:</span>
+        <span className="text-xs text-[var(--ink-soft)]">{t("progress.showing")}</span>
         <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           {SCOPE_OPTIONS.map((s) => (
             <button
@@ -148,7 +160,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
                   : "text-[var(--ink-soft)]"
               }`}
             >
-              {s.label}
+              {t(s.key)}
             </button>
           ))}
         </div>
@@ -158,28 +170,31 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
         <section className={`flex flex-col gap-3 ${CARD}`}>
           <Meter
             icon="📚"
-            label="Books touched"
+            label={t("progress.booksTouched")}
             pct={progress.booksProgressPct}
-            sublabel={`${progress.booksTouchedCount}/66 books`}
+            sublabel={booksTouchedSublabel(uiLang, progress.booksTouchedCount)}
           />
           <Meter
             icon="📖"
-            label={`Currently in: ${progress.currentBook}`}
+            label={currentlyIn(uiLang, progress.currentBook ?? "")}
             pct={progress.currentBookProgressPct ?? 0}
-            sublabel={`${progress.currentBookChaptersTouched ?? 0}/${progress.currentBookTotalChapters ?? "?"} chapters`}
+            sublabel={chaptersSublabel(
+              uiLang,
+              progress.currentBookChaptersTouched ?? 0,
+              progress.currentBookTotalChapters ?? "?",
+            )}
           />
         </section>
       ) : (
-        <p className="text-sm text-[var(--ink-soft)]">Start reading to see your progress here.</p>
+        <p className="text-sm text-[var(--ink-soft)]">{t("progress.startReadingHint")}</p>
       )}
 
       <section className={CARD}>
         <h2 className="mb-3 text-sm font-semibold text-[var(--ink-soft)]">
-          🔥 {progress.activityCount} reading{progress.activityCount === 1 ? "" : "s"}{" "}
-          {scope === "cycle" ? "this cycle" : "all time"}
+          {readingActivityHeading(uiLang, progress.activityCount, scope)}
         </h2>
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium text-[var(--ink-soft)]">Old Testament</p>
+          <p className="text-xs font-medium text-[var(--ink-soft)]">{t("progress.oldTestament")}</p>
           {progress.perBookProgress
             .filter((b) => b.testament === "old")
             .map((b) => (
@@ -190,7 +205,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
                 totalChapters={b.totalChapters}
               />
             ))}
-          <p className="mt-2 text-xs font-medium text-[var(--ink-soft)]">New Testament</p>
+          <p className="mt-2 text-xs font-medium text-[var(--ink-soft)]">{t("progress.newTestament")}</p>
           {progress.perBookProgress
             .filter((b) => b.testament === "new")
             .map((b) => (
@@ -240,6 +255,7 @@ function BookGrid({
 
 export default function ReadingPage() {
   const { name, login } = useUser();
+  const { uiLang, t } = useUiLanguage();
   const [nameInput, setNameInput] = useState("");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [subTab, setSubTab] = useState<"browse" | "progress">("browse");
@@ -247,7 +263,7 @@ export default function ReadingPage() {
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
   const [passageText, setPassageText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UiStringKey | null>(null);
   const [speakState, setSpeakState] = useState<"loading" | "playing" | "paused" | null>(null);
   const [activeChunkIndex, setActiveChunkIndex] = useState<number | null>(null);
 
@@ -306,7 +322,7 @@ export default function ReadingPage() {
         return res.json();
       })
       .then(({ content }) => setPassageText(content))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch(() => setError("errors.loadPassage"))
       .finally(() => setLoading(false));
   }, [selectedBook, selectedChapter, contentLanguage, name]);
 
@@ -327,18 +343,18 @@ export default function ReadingPage() {
           login(nameInput);
         }}
       >
-        <p className="text-sm text-[var(--ink-soft)]">Enter your name to save your reading progress.</p>
+        <p className="text-sm text-[var(--ink-soft)]">{t("login.prompt")}</p>
         <input
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
-          placeholder="Name"
+          placeholder={t("login.namePlaceholder")}
           className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
         />
         <button
           type="submit"
           className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
         >
-          Start
+          {t("login.start")}
         </button>
       </form>
     );
@@ -356,7 +372,7 @@ export default function ReadingPage() {
                 : "text-[var(--ink-soft)]"
             }`}
           >
-            Browse
+            {t("reading.browseTab")}
           </button>
           <button
             onClick={() => setSubTab("progress")}
@@ -366,7 +382,7 @@ export default function ReadingPage() {
                 : "text-[var(--ink-soft)]"
             }`}
           >
-            Progress
+            {t("reading.progressTab")}
           </button>
         </div>
         <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
@@ -397,8 +413,8 @@ export default function ReadingPage() {
 
       {subTab === "browse" && !selectedBook && (
         <div className="flex flex-col gap-4">
-          <BookGrid testament="old" title="Old Testament" lang={contentLanguage} onPick={setSelectedBook} />
-          <BookGrid testament="new" title="New Testament" lang={contentLanguage} onPick={setSelectedBook} />
+          <BookGrid testament="old" title={t("progress.oldTestament")} lang={contentLanguage} onPick={setSelectedBook} />
+          <BookGrid testament="new" title={t("progress.newTestament")} lang={contentLanguage} onPick={setSelectedBook} />
         </div>
       )}
 
@@ -408,7 +424,7 @@ export default function ReadingPage() {
             onClick={() => setSelectedBook(null)}
             className="self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
           >
-            ← Books
+            {t("reading.backToBooks")}
           </button>
           <h2 className="text-sm font-semibold">{selectedBook}</h2>
           <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
@@ -443,7 +459,7 @@ export default function ReadingPage() {
                   <button
                     onClick={speakPassage}
                     className="text-base"
-                    aria-label={`Listen to ${selectedBook} ${selectedChapter}`}
+                    aria-label={selectedBook && selectedChapter ? listenToAria(uiLang, selectedBook, selectedChapter) : undefined}
                   >
                     🔊
                   </button>
@@ -453,18 +469,18 @@ export default function ReadingPage() {
                       onClick={togglePausePassage}
                       disabled={speakState === "loading"}
                       className="text-base disabled:opacity-50"
-                      aria-label={speakState === "paused" ? "Resume" : "Pause"}
+                      aria-label={speakState === "paused" ? t("reading.resume") : t("reading.pause")}
                     >
                       {speakState === "loading" ? "…" : speakState === "paused" ? "▶️" : "⏸️"}
                     </button>
-                    <button onClick={stopPassage} className="text-base" aria-label="Stop">
+                    <button onClick={stopPassage} className="text-base" aria-label={t("reading.stop")}>
                       ⏹️
                     </button>
                   </div>
                 ))}
             </div>
-            {loading && <p className="text-sm text-[var(--ink-soft)]">Loading…</p>}
-            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            {loading && <p className="text-sm text-[var(--ink-soft)]">{t("reading.loading")}</p>}
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>}
             {passageText && (
               <>
                 <p className="text-sm leading-relaxed whitespace-pre-line">

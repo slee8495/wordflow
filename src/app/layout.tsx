@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ChatWidget } from "./ChatWidget";
 import { AppNav } from "./AppNav";
 import { FontScaleProvider } from "./FontScaleProvider";
+import { UiLanguageProvider } from "./UiLanguageProvider";
 import { UserProvider } from "./UserProvider";
+import { SettingsLink } from "./SettingsLink";
 import { FONT_SCALE_STORAGE_KEY } from "@/lib/fontScale";
 import "./globals.css";
 
@@ -59,34 +60,29 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-[var(--paper)] text-[var(--ink)]">
         <FontScaleProvider>
-          <UserProvider>
-            <header
-              className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur"
-              style={{ paddingTop: "env(safe-area-inset-top)" }}
-            >
-              <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
-                <span className="text-lg font-semibold tracking-tight text-[var(--clay-deep)]">📖 Wordflow</span>
-                <div className="flex items-center gap-2">
-                  <AppNav />
-                  <Link
-                    href="/settings"
-                    aria-label="Settings"
-                    title="Settings"
-                    className="rounded-full p-2 text-lg text-[var(--ink-soft)] transition-colors hover:bg-[var(--clay-tint)] hover:text-[var(--ink)]"
-                  >
-                    ⚙️
-                  </Link>
+          <UiLanguageProvider>
+            <UserProvider>
+              <header
+                className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur"
+                style={{ paddingTop: "env(safe-area-inset-top)" }}
+              >
+                <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+                  <span className="text-lg font-semibold tracking-tight text-[var(--clay-deep)]">📖 Wordflow</span>
+                  <div className="flex items-center gap-2">
+                    <AppNav />
+                    <SettingsLink />
+                  </div>
                 </div>
-              </div>
-            </header>
-            <main
-              className="mx-auto w-full max-w-2xl flex-1 px-4 py-6"
-              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-            >
-              {children}
-            </main>
-            <ChatWidget />
-          </UserProvider>
+              </header>
+              <main
+                className="mx-auto w-full max-w-2xl flex-1 px-4 py-6"
+                style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+              >
+                {children}
+              </main>
+              <ChatWidget />
+            </UserProvider>
+          </UiLanguageProvider>
         </FontScaleProvider>
       </body>
     </html>
