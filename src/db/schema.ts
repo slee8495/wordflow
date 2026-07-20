@@ -14,15 +14,21 @@ import {
 
 export const testamentEnum = pgEnum("testament", ["old", "new"]);
 
-// The ordered, theme-curated sequence of passages that every profile's cursor walks through.
-// Not book order — grouped by theme so day-to-day reading has narrative continuity. Loops back
-// to orderIndex 0 once a profile's cursor passes the last row.
+// The ordered sequence of passages that every profile's cursor walks through — one entry per
+// Bible chapter, in canonical book order (see curriculumData.ts), so a full cycle touches every
+// chapter exactly once with no gaps and no overlaps. Loops back to orderIndex 0 once a profile's
+// cursor passes the last row.
 //
-// Season entries (season + seasonDayIndex set) live in this same table but are NOT part of that
-// rotation — they use a separate orderIndex range (1000+, see seasonCurriculumData.ts) and every
-// query that computes the normal cursor's curriculumLength or orderIndex range must filter
-// `season IS NULL`, or a season row sharing a book name with a normal entry (e.g. both "Luke")
-// would corrupt the per-book progress math. See src/lib/season.ts for the day-of-year lookup.
+// Rows with season = 'legacy' are retired entries from the old ~50-item thematic-sampler
+// curriculum (pre chapter-complete rebuild) — kept only so historical readings' curriculumItemId
+// still resolves to their original passageRef; never part of the live rotation or any lookup.
+//
+// Season entries (season + seasonDayIndex set to "holy_week"/"christmas"/"thanksgiving") live in
+// this same table but are NOT part of that rotation either — they use a separate orderIndex range
+// (100000+, see seasonCurriculumData.ts) and every query that computes the normal cursor's
+// curriculumLength or orderIndex range must filter `season IS NULL`, or a season/legacy row
+// sharing a book name with a normal entry (e.g. both "Luke") would corrupt the per-book progress
+// math. See src/lib/season.ts for the day-of-year lookup.
 export const curriculumItems = pgTable("curriculum_items", {
   id: serial("id").primaryKey(),
   orderIndex: integer("order_index").notNull().unique(),

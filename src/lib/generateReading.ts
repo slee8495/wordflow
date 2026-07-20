@@ -10,6 +10,42 @@ import { searchWorshipSongs } from "@/lib/youtube";
 import { profileDateString } from "@/lib/date";
 import { getActiveSeason } from "@/lib/season";
 
+// Serializes any check-then-generate-then-advance-cursor sequence for a given profile behind a
+// Postgres transaction-scoped advisory lock, keyed on the profile's id. Without this, two
+// near-simultaneous requests (e.g. a double-tap, or two tabs) can both pass the "no reading yet
+// today" check before either has inserted its row, and both go on to generate a reading and
+// advance the cursor — producing a duplicate reading and skipping a curriculum step. The lock is
+// held only for the duration of fn(); the row inserts inside fn() still commit immediately on the
+// shared `db` connection, so by the time a second, blocked caller acquires the lock, the first
+// caller's insert is already visible and the "existing reading" check they re-run finds it.
+async function withProfileLock<T>(profileId: number, fn: () => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${profileId})`);
+    return fn();
+  });
+}
+
+// Cheap truncation detector: a prose field that got cut off mid-generation (hit a token limit,
+// leaked a dangling prompt fragment, etc.) almost never ends on sentence-ending punctuation —
+// it just stops mid-word or mid-clause. Not a grammar checker, just a smoke test.
+const SENTENCE_END = /[.!?"'”’」）)]\s*$/;
+function looksComplete(text: string | null | undefined, minLength = 10): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  return trimmed.length >= minLength && SENTENCE_END.test(trimmed);
+}
+
+// Re-runs fn() (a full model call) up to `attempts` times until isValid passes, returning the
+// last result either way — a validated response beats retrying forever, but an imperfect one
+// still beats throwing and blocking the whole reading over a single flaky field.
+async function withRetry<T>(fn: () => Promise<T>, isValid: (value: T) => boolean, attempts = 2): Promise<T> {
+  let result = await fn();
+  for (let i = 1; i < attempts && !isValid(result); i++) {
+    result = await fn();
+  }
+  return result;
+}
+
 const bilingualField = (description: string) =>
   z.object({
     ko: z.string().describe(`${description} (Korean)`),
@@ -46,22 +82,26 @@ const koreanPassageSchema = z.object({
 // src/lib/bible.ts), so Claude renders the Korean text itself instead, grounded in the NLT
 // English text so it isn't inventing the passage's content from scratch.
 async function generateKoreanPassage(reference: string, englishText: string | null) {
-  const { object } = await generateObject({
-    model: MODEL,
-    schema: koreanPassageSchema,
-    system:
-      "당신은 성경 본문을 쉬운 한글로 옮기는 번역가입니다. 원문의 사건과 의미를 정확히 지키되, " +
-      "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
-      "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요. " +
-      "story 버전은 verses 버전을 요약한 것이 아닙니다 — 모든 절의 내용을 빠짐없이 담아 절 번호만 " +
-      "빼고 이야기체 문장으로 자연스럽게 이어붙이세요.",
-    prompt: [
-      `본문: ${reference}`,
-      englishText ? `영어 NLT 원문:\n${englishText}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-  });
+  const { object } = await withRetry(
+    () =>
+      generateObject({
+        model: MODEL,
+        schema: koreanPassageSchema,
+        system:
+          "당신은 성경 본문을 쉬운 한글로 옮기는 번역가입니다. 원문의 사건과 의미를 정확히 지키되, " +
+          "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
+          "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요. " +
+          "story 버전은 verses 버전을 요약한 것이 아닙니다 — 모든 절의 내용을 빠짐없이 담아 절 번호만 " +
+          "빼고 이야기체 문장으로 자연스럽게 이어붙이세요.",
+        prompt: [
+          `본문: ${reference}`,
+          englishText ? `영어 NLT 원문:\n${englishText}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      }),
+    ({ object }) => looksComplete(object.verses, 20) && looksComplete(object.story, 20),
+  );
   return object;
 }
 
@@ -70,15 +110,19 @@ async function generateKoreanPassage(reference: string, englishText: string | nu
 // English: flow the same NLT wording into continuous prose with verse markers removed, no new
 // content invented.
 export async function generateEnglishStoryPassage(reference: string, englishVersesText: string): Promise<string | null> {
-  const { text } = await generateText({
-    model: MODEL,
-    system:
-      "You render Bible passages as smooth, continuous story-style prose in English. Preserve the given " +
-      "NLT wording and meaning as closely as possible — don't add or omit content, just remove verse-number " +
-      "markers and join the text into one natural flowing narrative with no verse breaks. Output only the " +
-      "passage text, no preamble.",
-    prompt: `Passage: ${reference}\n\nNLT text (verse-numbered):\n${englishVersesText}`,
-  });
+  const { text } = await withRetry(
+    () =>
+      generateText({
+        model: MODEL,
+        system:
+          "You render Bible passages as smooth, continuous story-style prose in English. Preserve the given " +
+          "NLT wording and meaning as closely as possible — don't add or omit content, just remove verse-number " +
+          "markers and join the text into one natural flowing narrative with no verse breaks. Output only the " +
+          "passage text, no preamble.",
+        prompt: `Passage: ${reference}\n\nNLT text (verse-numbered):\n${englishVersesText}`,
+      }),
+    ({ text }) => looksComplete(text, 20),
+  );
   return text.trim();
 }
 
@@ -105,22 +149,32 @@ async function buildReadingForItem(
 ) {
   const { koVerses, koStory, en, enStory } = await fetchPassageTexts(item.passageRef);
 
-  const { object } = await generateObject({
-    model: MODEL,
-    schema: readingSchema,
-    system:
-      "You write short, engaging daily Bible reading companions for a personal QT-style app called Wordflow. " +
-      "Tone: story-like, warm, never dry or academic. Write every field in BOTH Korean and English — the two " +
-      "should carry the same meaning, not be a literal translation of each other, each natural in its own " +
-      "language. Keep each field to about 3-5 sentences (the whole thing should read aloud in roughly 5 minutes).",
-    prompt: [
-      `Today's passage: ${item.passageRef} (theme bucket: ${item.theme})`,
-      koStory ? `한글 본문(이야기체):\n${koStory}` : null,
-      en ? `English NLT text:\n${en}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-  });
+  const { object } = await withRetry(
+    () =>
+      generateObject({
+        model: MODEL,
+        schema: readingSchema,
+        system:
+          "You write short, engaging daily Bible reading companions for a personal QT-style app called Wordflow. " +
+          "Tone: story-like, warm, never dry or academic. Write every field in BOTH Korean and English — the two " +
+          "should carry the same meaning, not be a literal translation of each other, each natural in its own " +
+          "language. Keep each field to about 3-5 sentences (the whole thing should read aloud in roughly 5 minutes).",
+        prompt: [
+          `Today's passage: ${item.passageRef} (theme bucket: ${item.theme})`,
+          koStory ? `한글 본문(이야기체):\n${koStory}` : null,
+          en ? `English NLT text:\n${en}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      }),
+    ({ object }) =>
+      looksComplete(object.storySummary.ko) &&
+      looksComplete(object.storySummary.en) &&
+      looksComplete(object.historicalContext.ko) &&
+      looksComplete(object.historicalContext.en) &&
+      looksComplete(object.personalMessage.ko) &&
+      looksComplete(object.personalMessage.en),
+  );
 
   const worship = await searchWorshipSongs(object.theme.ko, object.theme.en).catch(() => ({
     ko: null,
@@ -248,18 +302,20 @@ async function revealOrGenerate(profile: Profile, forDate: string) {
 // exactly the behavior that used to let the curriculum silently drift ahead of a profile that
 // hadn't opened the app in days.
 async function ensurePrefetchedNext(profileId: number): Promise<void> {
-  const [hidden] = await db
-    .select({ id: readings.id })
-    .from(readings)
-    .where(and(eq(readings.profileId, profileId), eq(readings.revealed, false)))
-    .limit(1);
-  if (hidden) return;
+  await withProfileLock(profileId, async () => {
+    const [hidden] = await db
+      .select({ id: readings.id })
+      .from(readings)
+      .where(and(eq(readings.profileId, profileId), eq(readings.revealed, false)))
+      .limit(1);
+    if (hidden) return;
 
-  const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
-  if (!profile) return;
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, profileId)).limit(1);
+    if (!profile) return;
 
-  await buildReading(profile, profileDateString(profile), false).catch(() => {
-    // best-effort — if this fails, the next reveal just falls back to synchronous generation
+    await buildReading(profile, profileDateString(profile), false).catch(() => {
+      // best-effort — if this fails, the next reveal just falls back to synchronous generation
+    });
   });
 }
 
@@ -310,22 +366,24 @@ export async function generateDailyReading(profile: Profile) {
   const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
 
-  const [existing] = await db
-    .select()
-    .from(readings)
-    .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
-    .orderBy(desc(readings.createdAt))
-    .limit(1);
-  if (existing) {
-    const [existingItem] = await db
+  return withProfileLock(profile.id, async () => {
+    const [existing] = await db
       .select()
-      .from(curriculumItems)
-      .where(eq(curriculumItems.id, existing.curriculumItemId))
+      .from(readings)
+      .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
+      .orderBy(desc(readings.createdAt))
       .limit(1);
-    return { ...existing, passageRef: existingItem?.passageRef ?? null };
-  }
+    if (existing) {
+      const [existingItem] = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.id, existing.curriculumItemId))
+        .limit(1);
+      return { ...existing, passageRef: existingItem?.passageRef ?? null };
+    }
 
-  return buildFirstReadingOfDay(profile, forDate);
+    return buildFirstReadingOfDay(profile, forDate);
+  });
 }
 
 // User-triggered "read next" action: reveals the buffered reading if one's ready (instant) or
@@ -335,7 +393,7 @@ export async function generateDailyReading(profile: Profile) {
 // the background for whatever comes after this one.
 export async function generateNextReading(profile: Profile) {
   after(() => ensurePrefetchedNext(profile.id));
-  return revealOrGenerate(profile, profileDateString(profile));
+  return withProfileLock(profile.id, () => revealOrGenerate(profile, profileDateString(profile)));
 }
 
 // All of today's readings for a profile, oldest first, so the UI can page back and forth
@@ -345,13 +403,15 @@ export async function getTodayReadings(profile: Profile) {
   const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
 
-  const existing = await db
-    .select()
-    .from(readings)
-    .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
-    .orderBy(readings.createdAt);
+  const rows = await withProfileLock(profile.id, async () => {
+    const existing = await db
+      .select()
+      .from(readings)
+      .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
+      .orderBy(readings.createdAt);
 
-  const rows = existing.length > 0 ? existing : [await buildFirstReadingOfDay(profile, forDate)];
+    return existing.length > 0 ? existing : [await buildFirstReadingOfDay(profile, forDate)];
+  });
 
   return Promise.all(
     rows.map(async (r) => {
@@ -365,12 +425,24 @@ export async function getTodayReadings(profile: Profile) {
   );
 }
 
+// Two brand-new tabs/requests for the same never-seen-before name can both pass the "no existing
+// profile" check before either has inserted — onConflictDoNothing turns the loser's unique-
+// constraint violation (profiles.name is unique) into a no-op insert instead of a thrown error,
+// and the re-select below fetches the row the winner actually created.
 export async function findOrCreateProfile(name: string): Promise<Profile> {
   const [existing] = await db.select().from(profiles).where(eq(profiles.name, name)).limit(1);
   if (existing) return existing;
 
-  const [created] = await db.insert(profiles).values({ name }).returning();
-  return created;
+  const [created] = await db
+    .insert(profiles)
+    .values({ name })
+    .onConflictDoNothing({ target: profiles.name })
+    .returning();
+  if (created) return created;
+
+  const [raced] = await db.select().from(profiles).where(eq(profiles.name, name)).limit(1);
+  if (!raced) throw new Error(`Failed to find or create profile "${name}"`);
+  return raced;
 }
 
 // Updates + returns the profile with a client-supplied timezone applied immediately, instead of
