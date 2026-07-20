@@ -20,7 +20,10 @@ const STRINGS = {
   "login.submit": { ko: "로그인", en: "Log in" },
 
   "today.changeName": { ko: "이름 변경", en: "Change name" },
-  "today.preparing": { ko: "오늘의 말씀 준비 중…", en: "Preparing today's reading…" },
+  "today.preparing": {
+    ko: "오늘의 말씀을 준비하고 있어요. 조금만 기다려 주세요…",
+    en: "Preparing today's reading. This may take a moment…",
+  },
   "today.previousPassage": { ko: "이전 본문", en: "Previous passage" },
   "today.nextPassage": { ko: "다음 본문", en: "Next passage" },
   "today.passageTitle": { ko: "오늘의 본문", en: "Today's Passage" },
@@ -93,7 +96,10 @@ const STRINGS = {
   "reading.browseTab": { ko: "찾아보기", en: "Browse" },
   "reading.progressTab": { ko: "진행 상황", en: "Progress" },
   "reading.backToBooks": { ko: "← 목록", en: "← Books" },
-  "reading.loading": { ko: "불러오는 중…", en: "Loading…" },
+  "reading.loading": {
+    ko: "본문을 불러오고 있어요. 조금만 기다려 주세요…",
+    en: "Loading the passage. This may take a moment…",
+  },
   "reading.resume": { ko: "이어 듣기", en: "Resume" },
   "reading.pause": { ko: "일시정지", en: "Pause" },
   "reading.stop": { ko: "정지", en: "Stop" },
