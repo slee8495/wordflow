@@ -3,12 +3,26 @@ import { after } from "next/server";
 import { z } from "zod";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { curriculumItems, profiles, readings, type CurriculumItem, type Profile } from "@/db/schema";
+import {
+  curriculumItems,
+  profiles,
+  readings,
+  type CurriculumItem,
+  type Profile,
+  type WorshipLink,
+} from "@/db/schema";
 import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs } from "@/lib/youtube";
 import { profileDateString } from "@/lib/date";
 import { getActiveSeason } from "@/lib/season";
+
+// Postgres advisory locks share one global keyspace, so two different lock uses (per-profile vs.
+// per-curriculum-item, below) need distinct namespaces or a profile id could collide with an
+// unrelated curriculum item id. Using the two-key form of pg_advisory_xact_lock(namespace, id)
+// keeps them apart.
+const LOCK_NAMESPACE_PROFILE = 1;
+const LOCK_NAMESPACE_CURRICULUM_ITEM = 2;
 
 // Serializes any check-then-generate-then-advance-cursor sequence for a given profile behind a
 // Postgres transaction-scoped advisory lock, keyed on the profile's id. Without this, two
@@ -20,7 +34,17 @@ import { getActiveSeason } from "@/lib/season";
 // caller's insert is already visible and the "existing reading" check they re-run finds it.
 async function withProfileLock<T>(profileId: number, fn: () => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(${profileId})`);
+    await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE_PROFILE}, ${profileId})`);
+    return fn();
+  });
+}
+
+// Same pattern, keyed on curriculum item id — guards the shared-content cache in
+// buildReadingForItem below (see its comment) so two profiles reaching a never-before-seen item
+// at the same instant can't both miss the cache and each pay for their own AI generation.
+async function withCurriculumItemLock<T>(itemId: number, fn: () => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${LOCK_NAMESPACE_CURRICULUM_ITEM}, ${itemId})`);
     return fn();
   });
 }
@@ -135,18 +159,48 @@ async function fetchPassageTexts(passageRef: string) {
   return { koVerses: ko?.verses ?? null, koStory: ko?.story ?? null, en, enStory };
 }
 
-// Generates and inserts a reading for a specific curriculum item — the shared content-generation
-// step, with no opinion on cursor position. Optional createdAt lets a caller backdate a row so it
-// sorts correctly among a profile's other readings for the day (used by catchUpReading below).
-// `revealed = false` inserts it as a hidden prefetch buffer instead of an immediately-visible
-// reading — see revealOrGenerate/ensurePrefetchedNext below.
-async function buildReadingForItem(
-  profile: Profile,
-  forDate: string,
-  item: CurriculumItem,
-  createdAt?: Date,
-  revealed = true,
-) {
+// The set of fields that make up a curriculum item's generated content — everything that's a
+// pure function of the passage itself, with no profile-specific input anywhere in how it's
+// produced. Shared type between generateFreshContent's return and the readings-table columns it
+// gets copied into/out of.
+type ReadingContent = {
+  theme: string;
+  storySummary: string;
+  historicalContext: string;
+  personalMessage: string;
+  themeEn: string;
+  storySummaryEn: string;
+  historicalContextEn: string;
+  personalMessageEn: string;
+  passageTextKoVerses: string | null;
+  passageTextKoStory: string | null;
+  passageTextEn: string | null;
+  passageTextEnStory: string | null;
+  worshipLinkKo: WorshipLink | null;
+  worshipLinkEn: WorshipLink | null;
+};
+
+const CONTENT_COLUMNS = {
+  theme: readings.theme,
+  storySummary: readings.storySummary,
+  historicalContext: readings.historicalContext,
+  personalMessage: readings.personalMessage,
+  themeEn: readings.themeEn,
+  storySummaryEn: readings.storySummaryEn,
+  historicalContextEn: readings.historicalContextEn,
+  personalMessageEn: readings.personalMessageEn,
+  passageTextKoVerses: readings.passageTextKoVerses,
+  passageTextKoStory: readings.passageTextKoStory,
+  passageTextEn: readings.passageTextEn,
+  passageTextEnStory: readings.passageTextEnStory,
+  worshipLinkKo: readings.worshipLinkKo,
+  worshipLinkEn: readings.worshipLinkEn,
+} as const;
+
+// Actually calls the model — fetches passage text, writes the theme/story/context/message
+// commentary, and looks up a worship song. Nothing here reads anything profile-specific, so its
+// output is safe to reuse for every profile that ever reaches this curriculum item.
+async function generateFreshContent(item: CurriculumItem): Promise<ReadingContent> {
   const { koVerses, koStory, en, enStory } = await fetchPassageTexts(item.passageRef);
 
   const { object } = await withRetry(
@@ -181,32 +235,67 @@ async function buildReadingForItem(
     en: null,
   }));
 
-  const [row] = await db
-    .insert(readings)
-    .values({
-      profileId: profile.id,
-      curriculumItemId: item.id,
-      forDate,
-      theme: object.theme.ko,
-      storySummary: object.storySummary.ko,
-      historicalContext: object.historicalContext.ko,
-      personalMessage: object.personalMessage.ko,
-      themeEn: object.theme.en,
-      storySummaryEn: object.storySummary.en,
-      historicalContextEn: object.historicalContext.en,
-      personalMessageEn: object.personalMessage.en,
-      passageTextKoVerses: koVerses,
-      passageTextKoStory: koStory,
-      passageTextEn: en,
-      passageTextEnStory: enStory,
-      worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
-      worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
-      revealed,
-      ...(createdAt ? { createdAt } : {}),
-    })
-    .returning();
+  return {
+    theme: object.theme.ko,
+    storySummary: object.storySummary.ko,
+    historicalContext: object.historicalContext.ko,
+    personalMessage: object.personalMessage.ko,
+    themeEn: object.theme.en,
+    storySummaryEn: object.storySummary.en,
+    historicalContextEn: object.historicalContext.en,
+    personalMessageEn: object.personalMessage.en,
+    passageTextKoVerses: koVerses,
+    passageTextKoStory: koStory,
+    passageTextEn: en,
+    passageTextEnStory: enStory,
+    worshipLinkKo: worship.ko ? { title: worship.ko.title, url: worship.ko.url } : null,
+    worshipLinkEn: worship.en ? { title: worship.en.title, url: worship.en.url } : null,
+  };
+}
 
-  return { ...row, passageRef: item.passageRef };
+// Generates (or reuses) and inserts a reading for a specific curriculum item — the shared
+// content-generation step, with no opinion on cursor position. Optional createdAt lets a caller
+// backdate a row so it sorts correctly among a profile's other readings for the day (used by
+// catchUpReading below). `revealed = false` inserts it as a hidden prefetch buffer instead of an
+// immediately-visible reading — see revealOrGenerate/ensurePrefetchedNext below.
+//
+// Content is a pure function of the curriculum item (no profile-specific input goes into the
+// prompt), so once any profile has generated it, every later profile — and every later cycle
+// through the curriculum, by anyone — reuses the same row's content instead of paying for a fresh
+// AI generation. Guarded by a per-item advisory lock so two profiles reaching a brand-new item at
+// the same instant can't both miss the cache and each generate their own copy.
+async function buildReadingForItem(
+  profile: Profile,
+  forDate: string,
+  item: CurriculumItem,
+  createdAt?: Date,
+  revealed = true,
+) {
+  // The insert must happen *inside* the lock, not after — otherwise a second caller blocked on
+  // the same item can acquire the lock in the gap between "content resolved" and "row inserted",
+  // find nothing yet committed, and generate its own redundant copy anyway.
+  return withCurriculumItemLock(item.id, async () => {
+    const [existing] = await db
+      .select(CONTENT_COLUMNS)
+      .from(readings)
+      .where(eq(readings.curriculumItemId, item.id))
+      .limit(1);
+    const content = existing ?? (await generateFreshContent(item));
+
+    const [row] = await db
+      .insert(readings)
+      .values({
+        profileId: profile.id,
+        curriculumItemId: item.id,
+        forDate,
+        ...content,
+        revealed,
+        ...(createdAt ? { createdAt } : {}),
+      })
+      .returning();
+
+    return { ...row, passageRef: item.passageRef };
+  });
 }
 
 // Always generates a fresh reading at the profile's current cursor position and advances the
