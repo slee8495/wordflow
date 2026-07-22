@@ -29,6 +29,12 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   // Guards a stale playText() call's callbacks/cleanup from running after a newer call (or an
   // explicit stop()) has already taken over — same idea as speak.ts's own playToken, one level up.
   const genRef = useRef(0);
+  // Mirrors speakState for resume() to read synchronously (see below) without needing speakState
+  // in its dependency array — keeps pause/resume/stop identity-stable across renders, which
+  // matters since they're re-registered with the Media Session API on every change (see the
+  // effect below).
+  const speakStateRef = useRef<SpeakState>(null);
+  speakStateRef.current = speakState;
 
   const playText = useCallback((id: string, lbl: string, text: string, startIndex?: number) => {
     if (!text.trim()) return;
@@ -66,10 +72,24 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resume = useCallback(() => {
-    setSpeakState((cur) => {
-      if (cur !== "paused") return cur;
-      resumeSpeaking();
-      return "playing";
+    if (speakStateRef.current !== "paused") return;
+    const gen = ++genRef.current;
+    setSpeakState("loading");
+    resumeSpeaking().then((ok) => {
+      if (genRef.current !== gen) return; // superseded by a newer action before this settled
+      if (ok) {
+        setSpeakState("playing");
+        return;
+      }
+      // Couldn't actually resume — most likely the phone was locked/backgrounded long enough
+      // that iOS discarded the audio session's buffered data (or a call/other audio interrupted
+      // it). There's no cached buffer left to restart from, so reset to a clean not-playing
+      // state instead of leaving the UI/lock-screen widget stuck showing "playing" with no
+      // sound — the user has to reopen the passage and press play again either way.
+      setSpeakState(null);
+      setActiveChunkIndex(null);
+      setSourceId(null);
+      setLabel(null);
     });
   }, []);
 

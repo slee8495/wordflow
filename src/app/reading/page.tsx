@@ -291,6 +291,13 @@ export default function ReadingPage() {
     setLoading(true);
     setError(null);
     setPassageText(null);
+    // Toggling the language quickly re-fires this effect before the previous request lands —
+    // Korean generation (Claude) is often slower than the plain NLT fetch for English, so without
+    // this guard, a still-in-flight Korean request could resolve AFTER a faster English one and
+    // silently overwrite the correct English text with stale Korean. `cancelled` is flipped by the
+    // cleanup function React runs before the next effect (or unmount), so a superseded request's
+    // response is a no-op instead of clobbering whatever the current selection actually is.
+    let cancelled = false;
     fetch(
       `/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}&name=${encodeURIComponent(name)}`,
     )
@@ -298,9 +305,21 @@ export default function ReadingPage() {
         if (!res.ok) throw new Error("failed to load passage");
         return res.json();
       })
-      .then(({ content }) => setPassageText(content))
-      .catch(() => setError("errors.loadPassage"))
-      .finally(() => setLoading(false));
+      .then(({ content }) => {
+        if (cancelled) return;
+        setPassageText(content);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError("errors.loadPassage");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // isSpeakingThisPassage/stop deliberately excluded — this should only re-run on book/chapter/
     // lang/name changes, not every time global playback state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

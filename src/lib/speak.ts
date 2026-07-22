@@ -52,6 +52,15 @@ export function splitIntoChunks(text: string): string[] {
   return chunks;
 }
 
+// By-verse passage text carries "(1) ", "(2) " ... markers so readers can see verse boundaries —
+// but a TTS engine reads them back literally as numbers ("one", "two"...), which is exactly the
+// bug this strips: the marker is display-only, spoken text should never include it. Global (not
+// just a leading match) since MAX_CHUNK_LENGTH bucketing can group more than one short verse into
+// a single chunk, putting a second "(N) " mid-string.
+function stripVerseMarkers(text: string): string {
+  return text.replace(/\(\d+\)\s*/g, "");
+}
+
 function speakWithBrowserVoice(text: string, onStart?: () => void) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -85,10 +94,24 @@ export function pauseSpeaking() {
   }
 }
 
-export function resumeSpeaking() {
-  currentAudio?.play().catch(() => {});
+// Resolves true only if audio actually resumed — a lock-screen "play" tap after the phone has
+// been backgrounded/locked for a while can reach this code with `currentAudio` pointing at an
+// element whose underlying buffered data iOS has quietly discarded (or the audio has been
+// interrupted, e.g. by a phone call), in which case .play() rejects or resolves without ever
+// actually starting. Silently swallowing that (as this used to do) left the UI/media-session
+// stuck showing "playing" forever with no sound — the caller uses the return value to reset back
+// to a clean not-playing state instead, so at least it's honestly showing nothing is happening.
+export async function resumeSpeaking(): Promise<boolean> {
   if (typeof window !== "undefined" && window.speechSynthesis?.paused) {
     window.speechSynthesis.resume();
+    return true;
+  }
+  if (!currentAudio) return false;
+  try {
+    await currentAudio.play();
+    return !currentAudio.paused;
+  } catch {
+    return false;
   }
 }
 
@@ -153,7 +176,10 @@ export async function speak(
   const startIndex = Math.min(Math.max(opts.startIndex ?? 0, 0), Math.max(chunks.length - 1, 0));
   const requested = chunks.slice(startIndex);
 
-  const buffers = await Promise.all(requested.map((chunk) => fetchAudioBuffer(chunk)));
+  // Chunk boundaries/indices below (offsets, activeChunkIndex, highlighting) all stay keyed off
+  // the ORIGINAL `chunks`/`requested` text, so stripping markers only for the TTS request doesn't
+  // shift anything the UI depends on for click-to-seek or highlight sync.
+  const buffers = await Promise.all(requested.map((chunk) => fetchAudioBuffer(stripVerseMarkers(chunk))));
   if (token !== playToken) return;
 
   // Chunks that failed to generate are quietly skipped from the combined file rather than
