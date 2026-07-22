@@ -99,6 +99,35 @@ const EXCLUDE_TERMS = [
   "bible study",
   "scripture reading",
   "homily",
+  // Clergy/preacher titles — a title or channel carrying one of these is virtually always a
+  // sermon/talk clip (reported: an inspirational-quote-style clip credited to "Apostle Joshua
+  // Selman"), regardless of how the clip itself is phrased. Generalizes across any preacher,
+  // not just ones already seen, the same way the citation-title pattern below generalizes
+  // across narration channels.
+  "apostle",
+  "pastor",
+  "bishop",
+  "prophet",
+  "evangelist",
+  "reverend",
+  "목사",
+  "전도사",
+  "장로",
+  "사도",
+  // Instructional/lesson content — chord charts and how-to-play videos are music-adjacent
+  // (and pass the videoCategoryId=10 Music filter) but aren't a performance to listen to.
+  // Deliberately does NOT include "cover" — a cover performance of a real song is legitimate
+  // worship content, unlike a tutorial about how to play one.
+  "코드",
+  "반주법",
+  "레슨",
+  "독학",
+  "왕초보",
+  "코드진행",
+  "chord",
+  "chords",
+  "tutorial",
+  "how to play",
 ];
 
 // Positive signal that a result is actually a song, not just uncategorized/mislabeled spoken
@@ -150,6 +179,20 @@ function matchesLanguage(result: YoutubeResult, lang: "ko" | "en"): boolean {
 // specific known offender the other checks wouldn't otherwise flag, not the primary mechanism.
 const EXCLUDE_CHANNELS = ["kononia", "koinonia watch"];
 
+// Exported so scripts/repair-worship-links.ts can re-check already-cached links against
+// whatever these rules currently are, instead of keeping its own copy that silently drifts out
+// of sync every time this file's rules change (which is exactly how a repair run went from under
+// updated rules before — it re-ran a stale definition of "bad" and found nothing).
+export function isSafeWorshipResult(result: YoutubeResult, lang: "ko" | "en"): boolean {
+  const title = result.title.toLowerCase();
+  const channel = result.channelTitle.toLowerCase();
+  if (EXCLUDE_TERMS.some((term) => title.includes(term) || channel.includes(term))) return false;
+  if (EXCLUDE_CHANNELS.some((name) => channel.includes(name))) return false;
+  if (CITATION_TITLE_PATTERN.test(result.title)) return false;
+  if (!matchesLanguage(result, lang)) return false;
+  return true;
+}
+
 function pickWorship(
   results: YoutubeResult[],
   lang: "ko" | "en",
@@ -157,15 +200,7 @@ function pickWorship(
   knownArtists: string[],
   subscriberCounts: Map<string, number>,
 ): YoutubeResult | null {
-  const safe = results.filter((r) => {
-    const title = r.title.toLowerCase();
-    const channel = r.channelTitle.toLowerCase();
-    if (EXCLUDE_TERMS.some((term) => title.includes(term) || channel.includes(term))) return false;
-    if (EXCLUDE_CHANNELS.some((name) => channel.includes(name))) return false;
-    if (CITATION_TITLE_PATTERN.test(r.title)) return false;
-    if (!matchesLanguage(r, lang)) return false;
-    return true;
-  });
+  const safe = results.filter((r) => isSafeWorshipResult(r, lang));
 
   const qualified = safe.filter((r) => {
     const title = r.title.toLowerCase();

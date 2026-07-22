@@ -37,7 +37,20 @@ let playToken = 0;
 const MAX_CHUNK_LENGTH = 200;
 
 export function splitIntoChunks(text: string): string[] {
-  const sentences = text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) ?? [text];
+  // Used to require [.!?]+ to be followed by whitespace-or-end to count as a sentence boundary,
+  // to avoid treating something like "3.14" as two sentences. But dialogue-heavy prose (story
+  // mode is full of it) routinely has the closing punctuation land *inside* a quote with nothing
+  // but more text right after — English: `said, "My son." "Yes?" Esau replied.` (quote then a
+  // space, still fine) but Korean quotative grammar attaches the next word directly with NO space
+  // at all: `...하셨나요?"라고 물었습니다` (question mark, closing quote, then straight into the
+  // next word). Requiring a trailing whitespace/end at that position can never match, and
+  // `String.match` with /g just silently skips forward to wherever it next CAN match — dropping
+  // every sentence in between entirely (confirmed: this is what made the opening of Genesis 27's
+  // story mode disappear, and separately, whole clauses inside other readings' Korean story text
+  // whenever a quote ended with a directly-attached particle). Dropping the requirement instead of
+  // trying to enumerate every language's attachment rule guarantees every character of the input
+  // ends up in some chunk — verified by reconstructing the original string from the chunks.
+  const sentences = text.match(/[^.!?]+[.!?]+["'‘’“”]*|[^.!?]+$/g) ?? [text];
   const chunks: string[] = [];
   let buf = "";
   for (const sentence of sentences) {

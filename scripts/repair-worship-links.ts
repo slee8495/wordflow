@@ -15,29 +15,20 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../src/db";
 import { readings, type WorshipLink } from "../src/db/schema";
-import { searchWorshipSongs } from "../src/lib/youtube";
+import { isSafeWorshipResult, searchWorshipSongs, type YoutubeResult } from "../src/lib/youtube";
 
-const HANGUL_PATTERN = /[가-힣]/;
-const OTHER_SCRIPT_PATTERN = /[؀-ۿݐ-ݿ一-鿿぀-ヿЀ-ӿ֐-׿]/;
-const CITATION_TITLE_PATTERN = /\bchapter\s*\d+\b|\d+\s*장\b/i;
+// Imports the real check from youtube.ts instead of keeping a separate copy — a duplicated copy
+// silently drifted out of sync the first time youtube.ts's rules were tightened (a repair run
+// under the stale copy found nothing, even though the newly-added rules should have caught two
+// more bad links). WorshipLink only stores {title, url} (no channelTitle), so this is checked
+// with an empty channelTitle — a real gap versus the live search path, but every rule reported so
+// far has been catchable from the title alone.
 const HTML_ENTITY_PATTERN = /&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);/;
-const EXCLUDE_CHANNELS = ["kononia", "koinonia watch"];
-const EXCLUDE_TERMS = [
-  "신부", "강론", "미사", "성당", "수녀", "발췌문", "큐티", "말씀나눔", "말씀 나눔", "강해", "설교", "새벽기도",
-  "sermon", "devotional", "bible study", "scripture reading", "homily",
-];
-
 function looksBad(link: WorshipLink | null, lang: "ko" | "en"): boolean {
   if (!link) return false;
-  const title = link.title.toLowerCase();
   if (HTML_ENTITY_PATTERN.test(link.title)) return true;
-  if (CITATION_TITLE_PATTERN.test(link.title)) return true;
-  if (EXCLUDE_TERMS.some((t) => title.includes(t))) return true;
-  if (EXCLUDE_CHANNELS.some((t) => title.includes(t))) return true;
-  const hasHangul = HANGUL_PATTERN.test(link.title);
-  const hasOtherScript = OTHER_SCRIPT_PATTERN.test(link.title);
-  if (lang === "ko") return !hasHangul;
-  return hasHangul || hasOtherScript;
+  const asResult: YoutubeResult = { title: link.title, channelTitle: "", channelId: "", url: link.url };
+  return !isSafeWorshipResult(asResult, lang);
 }
 
 async function main() {
