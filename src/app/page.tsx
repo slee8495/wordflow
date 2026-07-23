@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { splitIntoChunks } from "@/lib/speak";
+import { dateStringInTimezone, shiftDateString } from "@/lib/date";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
 import { AuthScreen } from "./AuthScreen";
@@ -138,6 +139,12 @@ export default function Home() {
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [generatingNext, setGeneratingNext] = useState(false);
+  // null means "today" — the only mode that can generate new readings. Any other value is a past
+  // date being browsed read-only via /api/reading/history.
+  const [viewDate, setViewDate] = useState<string | null>(null);
+  const todayDateString = dateStringInTimezone(timezone);
+  const effectiveDate = viewDate ?? todayDateString;
+  const isToday = viewDate === null;
 
   function speakingSectionFor(id: string): { id: string; state: SpeakState } | null {
     return sourceId === sectionSourceId(id) && globalSpeakState ? { id, state: globalSpeakState } : null;
@@ -155,18 +162,33 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetch(`/api/today?timezone=${encodeURIComponent(timezone)}`)
+    setPassageView("verses");
+    const url =
+      viewDate === null
+        ? `/api/today?timezone=${encodeURIComponent(timezone)}`
+        : `/api/reading/history?date=${viewDate}`;
+    fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("failed to load today's reading");
+        if (!res.ok) throw new Error("failed to load reading");
         return res.json();
       })
       .then(({ readings }: { readings: Reading[] }) => {
         setReadings(readings);
-        setIndex(readings.length - 1);
+        setIndex(Math.max(0, readings.length - 1));
       })
       .catch(() => setError("errors.loadToday"))
       .finally(() => setLoading(false));
-  }, [name, timezone]);
+  }, [name, timezone, viewDate]);
+
+  function goToPreviousDay() {
+    setViewDate(shiftDateString(effectiveDate, -1));
+  }
+
+  function goToNextDay() {
+    if (isToday) return;
+    const next = shiftDateString(effectiveDate, 1);
+    setViewDate(next >= todayDateString ? null : next);
+  }
 
   function setLanguage(lang: "ko" | "en") {
     setContentLanguage(lang);
@@ -200,13 +222,17 @@ export default function Home() {
     }
   }
 
-  const todayLabel = new Intl.DateTimeFormat(uiLang === "ko" ? "ko-KR" : "en-US", {
-    timeZone: timezone,
+  // effectiveDate is always a resolved YYYY-MM-DD string (already the right calendar day in the
+  // profile's timezone), so format it as an absolute date via UTC rather than re-applying a
+  // timezone conversion on top, which would risk shifting it to the adjacent day.
+  const [dayY, dayM, dayD] = effectiveDate.split("-").map(Number);
+  const dayLabel = new Intl.DateTimeFormat(uiLang === "ko" ? "ko-KR" : "en-US", {
+    timeZone: "UTC",
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
-  }).format(new Date());
+  }).format(new Date(Date.UTC(dayY, dayM - 1, dayD)));
 
   if (name === null) {
     return <AuthScreen />;
@@ -235,7 +261,24 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[var(--ink-soft)]">{todayLabel}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToPreviousDay}
+            aria-label={t("today.previousDay")}
+            className="text-sm text-[var(--ink-soft)] hover:text-[var(--ink)]"
+          >
+            ←
+          </button>
+          <span className="text-sm text-[var(--ink-soft)]">{dayLabel}</span>
+          <button
+            onClick={goToNextDay}
+            disabled={isToday}
+            aria-label={t("today.nextDay")}
+            className="text-sm text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-30 disabled:hover:text-[var(--ink-soft)]"
+          >
+            →
+          </button>
+        </div>
         <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           <button
             onClick={() => setLanguage("ko")}
@@ -275,6 +318,9 @@ export default function Home() {
 
       {loading && <p className="text-sm text-[var(--ink-soft)]">{t("today.preparing")}</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>}
+      {!loading && !error && readings.length === 0 && (
+        <p className="text-sm text-[var(--ink-soft)]">{t("today.noReadingThisDay")}</p>
+      )}
 
       {readings.length > 1 && (
         <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] px-3 py-2">
@@ -402,7 +448,7 @@ export default function Home() {
             </Section>
           )}
 
-          {index === readings.length - 1 && (
+          {isToday && index === readings.length - 1 && (
             <button
               onClick={readNext}
               disabled={generatingNext}

@@ -45,6 +45,12 @@ const STRINGS = {
   },
   "today.previousPassage": { ko: "이전 본문", en: "Previous passage" },
   "today.nextPassage": { ko: "다음 본문", en: "Next passage" },
+  "today.previousDay": { ko: "← 이전 날", en: "← Previous day" },
+  "today.nextDay": { ko: "다음 날 →", en: "Next day →" },
+  "today.noReadingThisDay": {
+    ko: "이 날은 읽은 기록이 없어요.",
+    en: "No reading recorded for this day.",
+  },
   "today.passageTitle": { ko: "오늘의 본문", en: "Today's Passage" },
   "today.contextTitle": { ko: "배경 설명", en: "Context & Background" },
   "today.messageTitle": { ko: "오늘의 메시지", en: "Today's Message" },
@@ -140,7 +146,7 @@ export function greeting(lang: Lang, name: string): string {
 }
 
 export function passageOfLabel(lang: Lang, index: number, total: number): string {
-  return lang === "ko" ? `오늘 본문 ${index}/${total}` : `Passage ${index} of ${total} today`;
+  return lang === "ko" ? `본문 ${index}/${total}` : `Passage ${index} of ${total}`;
 }
 
 export function loggedInAs(lang: Lang, name: string): string {

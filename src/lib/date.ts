@@ -36,3 +36,12 @@ export function profileDateString(profile: { timezone: string | null }, offsetDa
 export function profileHour(profile: { timezone: string | null }): number {
   return hourInTimezone(profile.timezone ?? DEFAULT_TIMEZONE);
 }
+
+// Shifts a YYYY-MM-DD string by `offsetDays`, pure calendar arithmetic on the date components
+// (not timezone-aware — the string already reflects whatever timezone's day boundary it came
+// from) — used by the Today tab's day-by-day history navigation to step to an adjacent date
+// without re-deriving "now" in some timezone.
+export function shiftDateString(dateStr: string, offsetDays: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + offsetDays)).toISOString().slice(0, 10);
+}

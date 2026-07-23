@@ -514,6 +514,29 @@ export async function getTodayReadings(profile: Profile) {
   );
 }
 
+// Read-only lookup for the Today tab's "browse previous days" navigation. Unlike getTodayReadings,
+// never generates or reveals anything — a date the profile never opened the app on simply has no
+// rows (the curriculum cursor only advances on days someone actually shows up), and the UI shows
+// an empty state for those.
+export async function getReadingsForDate(profile: Profile, forDate: string) {
+  const rows = await db
+    .select()
+    .from(readings)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
+    .orderBy(readings.createdAt);
+
+  return Promise.all(
+    rows.map(async (r) => {
+      const [item] = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.id, r.curriculumItemId))
+        .limit(1);
+      return { ...r, passageRef: item?.passageRef ?? null };
+    }),
+  );
+}
+
 // Updates + returns the profile with a client-supplied timezone applied immediately, instead of
 // waiting on ProfileSettingsSync's separate POST to land first. Without this, a profile's very
 // first request of the day (the one that actually decides that day's forDate) could race ahead of
