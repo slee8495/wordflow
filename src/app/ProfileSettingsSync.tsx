@@ -19,7 +19,7 @@ export function ProfileSettingsSync() {
     fetch("/api/profile/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, uiLang, timezone }),
+      body: JSON.stringify({ uiLang, timezone }),
     }).catch(() => {});
   }, [name, uiLang, timezone]);
 

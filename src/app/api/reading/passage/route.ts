@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chapterCountForBook } from "@/lib/bibleBooks";
 import { getOrFetchPassage, logDeepRead } from "@/lib/deepReading";
-import { findOrCreateProfile } from "@/lib/generateReading";
+import { requireProfile } from "@/lib/authProfile";
 
 export const maxDuration = 60;
 
-// Fetches (and caches) one chapter's text for the Reading tab's book/chapter browser, and logs
-// it as a deep-reading event for the given profile if `name` is provided.
+// Fetches (and caches) one chapter's text for the Reading tab's book/chapter browser. The text
+// itself isn't sensitive/personalized (shared cache across every profile — see deepReading.ts),
+// so this doesn't require being signed in; it just logs the deep-read event against the caller's
+// own linked profile when there is one, instead of trusting a client-supplied name the way this
+// used to.
 export async function GET(req: NextRequest) {
   const book = req.nextUrl.searchParams.get("book")?.trim();
   const chapterParam = req.nextUrl.searchParams.get("chapter");
   const lang = req.nextUrl.searchParams.get("lang");
-  const name = req.nextUrl.searchParams.get("name")?.trim();
 
   const chapterCount = book ? chapterCountForBook(book) : null;
   const chapter = chapterParam ? Number(chapterParam) : NaN;
@@ -25,10 +27,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const content = await getOrFetchPassage(book, chapter, lang);
-    if (name) {
-      const profile = await findOrCreateProfile(name);
-      await logDeepRead(profile, book, chapter);
-    }
+    const profile = await requireProfile().catch(() => null);
+    if (profile) await logDeepRead(profile, book, chapter);
     return NextResponse.json({ content });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -1,38 +1,102 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { signIn as nextAuthSignIn, signOut as nextAuthSignOut, useSession } from "next-auth/react";
 
-const NAME_KEY = "wordflow:name";
+// "loading": session status still resolving, or (once signed in) still waiting on /api/profile/me.
+// "signedOut": no Google session.
+// "needsProfile": signed in, but this Google account has no linked profile yet — onboarding.
+// "ready": signed in and linked to a profile; `name` is populated.
+type AuthStatus = "loading" | "signedOut" | "needsProfile" | "ready";
 
-const UserContext = createContext<{
+type UserContextValue = {
+  status: AuthStatus;
+  // Non-null only when status === "ready" — mirrors the old pre-auth shape so most consumers
+  // only need to check `name` the same way they always did.
   name: string | null;
-  login: (name: string) => void;
+  signInWithGoogle: () => void;
   logout: () => void;
-} | null>(null);
+  // Onboarding action: claims an existing pre-auth profile by name, or creates a new one if that
+  // name isn't taken. Throws on failure (e.g. "name_taken") so the caller can show an error.
+  claimOrCreateProfile: (name: string) => Promise<void>;
+};
+
+const UserContext = createContext<UserContextValue | null>(null);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
+  const { data: session, status: sessionStatus } = useSession();
   const [name, setName] = useState<string | null>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
 
   useEffect(() => {
-    // localStorage only exists client-side, so this can't be a lazy useState initializer
-    // without risking a hydration mismatch against the server-rendered logged-out state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setName(localStorage.getItem(NAME_KEY));
+    if (sessionStatus !== "authenticated") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setName(null);
+      setProfileChecked(false);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/profile/me")
+      .then((res) => res.json())
+      .then((data: { status: string; name?: string }) => {
+        if (cancelled) return;
+        setName(data.status === "ready" ? (data.name ?? null) : null);
+        setProfileChecked(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProfileChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionStatus]);
+
+  const status: AuthStatus =
+    sessionStatus === "loading"
+      ? "loading"
+      : sessionStatus === "unauthenticated"
+        ? "signedOut"
+        : !profileChecked
+          ? "loading"
+          : name
+            ? "ready"
+            : "needsProfile";
+
+  const signInWithGoogle = useCallback(() => {
+    nextAuthSignIn("google");
   }, []);
 
-  function login(next: string) {
-    const trimmed = next.trim();
-    if (!trimmed) return;
-    localStorage.setItem(NAME_KEY, trimmed);
-    setName(trimmed);
-  }
-
-  function logout() {
-    localStorage.removeItem(NAME_KEY);
+  const logout = useCallback(() => {
     setName(null);
-  }
+    setProfileChecked(false);
+    nextAuthSignOut();
+  }, []);
 
-  return <UserContext.Provider value={{ name, login, logout }}>{children}</UserContext.Provider>;
+  const claimOrCreateProfile = useCallback(async (nextName: string) => {
+    const trimmed = nextName.trim();
+    if (!trimmed) return;
+    const res = await fetch("/api/profile/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error ?? "claim_failed");
+    }
+    setName(data.name);
+  }, []);
+
+  // session is only read for its authenticated-ness (via sessionStatus) above — kept out of the
+  // context value since no consumer needs raw Google profile data, just the app's own `name`.
+  void session;
+
+  return (
+    <UserContext.Provider value={{ status, name, signInWithGoogle, logout, claimOrCreateProfile }}>
+      {children}
+    </UserContext.Provider>
+  );
 }
 
 export function useUser() {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles, pushSubscriptions } from "@/db/schema";
-import { findOrCreateProfile } from "@/lib/generateReading";
+import { authErrorResponse, requireProfile } from "@/lib/authProfile";
 
 function isValidTimezone(tz: unknown): tz is string {
   if (typeof tz !== "string" || !tz) return false;
@@ -20,7 +20,6 @@ function isValidTimezone(tz: unknown): tz is string {
 // first subscribe already has everything the cron needs instead of waiting on a later sync.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const name = body?.name?.trim();
   const subscription = body?.subscription;
   const uiLang = body?.uiLang === "ko" ? "ko" : body?.uiLang === "en" ? "en" : undefined;
   const timezone = isValidTimezone(body?.timezone) ? body.timezone : undefined;
@@ -32,12 +31,12 @@ export async function POST(req: NextRequest) {
   const p256dh = subscription?.keys?.p256dh;
   const auth = subscription?.keys?.auth;
 
-  if (!name || !endpoint || !p256dh || !auth) {
-    return NextResponse.json({ error: "name and a valid subscription are required" }, { status: 400 });
+  if (!endpoint || !p256dh || !auth) {
+    return NextResponse.json({ error: "a valid subscription is required" }, { status: 400 });
   }
 
   try {
-    const profile = await findOrCreateProfile(name);
+    const profile = await requireProfile();
 
     await db
       .insert(pushSubscriptions)
@@ -59,6 +58,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ status: "ok" });
   } catch (err) {
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "failed to save subscription", detail: message }, { status: 500 });
   }

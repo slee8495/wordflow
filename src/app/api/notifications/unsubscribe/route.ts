@@ -2,18 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles, pushSubscriptions } from "@/db/schema";
+import { authErrorResponse, requireProfile } from "@/lib/authProfile";
 
 // Removes one device's subscription and, if that profile has no subscriptions left, flips
 // notificationsEnabled back off.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const name = body?.name?.trim();
   const endpoint = body?.endpoint;
-  if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   try {
-    const [profile] = await db.select().from(profiles).where(eq(profiles.name, name)).limit(1);
-    if (!profile) return NextResponse.json({ status: "ok" });
+    const profile = await requireProfile();
 
     if (endpoint) {
       await db
@@ -35,6 +33,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ status: "ok" });
   } catch (err) {
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "failed to remove subscription", detail: message }, { status: 500 });
   }

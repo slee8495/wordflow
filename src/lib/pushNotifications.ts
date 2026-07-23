@@ -21,7 +21,6 @@ export function pushSupported(): boolean {
 }
 
 export async function enableNotifications(
-  name: string,
   uiLang: "ko" | "en",
   timezone: string,
   notificationHour: number,
@@ -48,22 +47,22 @@ export async function enableNotifications(
   const res = await fetch("/api/notifications/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, uiLang, timezone, notificationHour, subscription: subscription.toJSON() }),
+    body: JSON.stringify({ uiLang, timezone, notificationHour, subscription: subscription.toJSON() }),
   });
   if (!res.ok) return { ok: false, error: "save-failed" };
   return { ok: true };
 }
 
-export async function updateNotificationHour(name: string, notificationHour: number): Promise<boolean> {
+export async function updateNotificationHour(notificationHour: number): Promise<boolean> {
   const res = await fetch("/api/notifications/preferences", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, notificationHour }),
+    body: JSON.stringify({ notificationHour }),
   });
   return res.ok;
 }
 
-export async function disableNotifications(name: string): Promise<void> {
+export async function disableNotifications(): Promise<void> {
   if (!pushSupported()) return;
   const registration = await navigator.serviceWorker.getRegistration("/sw.js");
   const subscription = await registration?.pushManager.getSubscription();
@@ -72,6 +71,6 @@ export async function disableNotifications(name: string): Promise<void> {
   await fetch("/api/notifications/unsubscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, endpoint }),
+    body: JSON.stringify({ endpoint }),
   }).catch(() => {});
 }

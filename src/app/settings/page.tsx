@@ -6,6 +6,7 @@ import { FONT_SCALES } from "@/lib/fontScale";
 import { fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
 import { disableNotifications, enableNotifications, pushSupported, updateNotificationHour } from "@/lib/pushNotifications";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
+import { AuthScreen } from "../AuthScreen";
 import { useFontScale } from "../FontScaleProvider";
 import { useTimezone } from "../TimezoneProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
@@ -19,10 +20,9 @@ function formatHourLabel(hour: number, lang: "ko" | "en"): string {
 
 export default function SettingsPage() {
   const { scale, setScale } = useFontScale();
-  const { name, login, logout } = useUser();
+  const { name, logout } = useUser();
   const { uiLang, setUiLang, t } = useUiLanguage();
   const { timezone, setTimezone } = useTimezone();
-  const [nameInput, setNameInput] = useState("");
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [notificationHour, setNotificationHour] = useState(DEFAULT_NOTIFICATION_HOUR);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
@@ -30,7 +30,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!name) return;
-    fetch(`/api/notifications/status?name=${encodeURIComponent(name)}`)
+    fetch("/api/notifications/status")
       .then((res) => res.json())
       .then(({ enabled, notificationHour: hour }) => {
         setNotificationsOn(Boolean(enabled));
@@ -45,14 +45,14 @@ export default function SettingsPage() {
     setNotificationsError(null);
     try {
       if (notificationsOn) {
-        await disableNotifications(name);
+        await disableNotifications();
         setNotificationsOn(false);
       } else {
         if (!pushSupported()) {
           setNotificationsError("settings.notificationsUnsupported");
           return;
         }
-        const result = await enableNotifications(name, uiLang, timezone, notificationHour);
+        const result = await enableNotifications(uiLang, timezone, notificationHour);
         if (result.ok) {
           setNotificationsOn(true);
         } else if (result.error === "permission-denied") {
@@ -68,7 +68,7 @@ export default function SettingsPage() {
 
   async function changeNotificationHour(hour: number) {
     setNotificationHour(hour);
-    if (name && notificationsOn) await updateNotificationHour(name, hour);
+    if (name && notificationsOn) await updateNotificationHour(hour);
   }
 
   return (
@@ -89,28 +89,7 @@ export default function SettingsPage() {
             </button>
           </div>
         ) : (
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!nameInput.trim()) return;
-              login(nameInput);
-              setNameInput("");
-            }}
-          >
-            <input
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              placeholder={t("login.namePlaceholder")}
-              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
-            />
-            <button
-              type="submit"
-              className="rounded-lg bg-[var(--clay-deep)] px-3 py-1.5 text-sm font-medium text-[var(--paper-raised)]"
-            >
-              {t("login.submit")}
-            </button>
-          </form>
+          <AuthScreen />
         )}
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.nameHint")}</p>
       </section>

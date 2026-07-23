@@ -10,9 +10,65 @@ import {
   pgEnum,
   unique,
   boolean,
+  primaryKey,
 } from "drizzle-orm/pg-core";
+import type { AdapterAccountType } from "next-auth/adapters";
 
 export const testamentEnum = pgEnum("testament", ["old", "new"]);
+
+// Auth.js (NextAuth v5) schema, shaped exactly as @auth/drizzle-adapter expects — table/column
+// names matter here, this isn't just app convention. Session strategy is JWT (see auth.ts), so
+// the `sessions` table isn't actually read/written by Auth.js itself, but the adapter still
+// requires it to exist. `users`/`accounts` are what's actually used: one `users` row per person,
+// one `accounts` row per OAuth provider they've linked (Google now, Apple later — same user can
+// have both once Apple's added).
+export const users = pgTable("user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: timestamp("emailVerified", { mode: "date" }),
+  image: text("image"),
+});
+
+export const accounts = pgTable(
+  "account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccountType>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })],
+);
+
+export const sessions = pgTable("session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verificationToken",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+  },
+  (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })],
+);
 
 // The ordered sequence of passages that every profile's cursor walks through — one entry per
 // Bible chapter, in canonical book order (see curriculumData.ts), so a full cycle touches every
@@ -43,10 +99,16 @@ export const curriculumItems = pgTable("curriculum_items", {
 
 export type WorshipLink = { title: string; url: string };
 
-// A lightweight name-based profile — no password/auth yet. `name` is the login.
+// `name` was the entire login mechanism pre-auth (anyone could type any existing name and see/
+// edit that profile's data — a real gap now that this is heading toward a public launch, not just
+// family use). userId links a profile to a real signed-in account (see src/auth.ts); null means
+// "not claimed yet" — either a pre-auth profile nobody's linked to their new account yet, or one
+// of the many throwaway test-profile rows from earlier development. Nullable and NOT unique-
+// constrained (unlike `name`) since the claim flow looks up by name first, then attaches userId.
 export const profiles = pgTable("profiles", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 64 }).notNull().unique(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
   cursorPosition: integer("cursor_position").default(0).notNull(),
   // Increments each time cursorPosition wraps past the end of curriculum_items — how many full
   // read-through cycles this profile has completed.

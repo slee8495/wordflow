@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { splitIntoChunks } from "@/lib/speak";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
+import { AuthScreen } from "./AuthScreen";
 import { usePlayback } from "./PlaybackProvider";
 import { useTimezone } from "./TimezoneProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
@@ -126,11 +127,10 @@ function Section({
 }
 
 export default function Home() {
-  const { name, login, logout } = useUser();
+  const { name, logout } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { timezone } = useTimezone();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex, playText, pause, resume, stop } = usePlayback();
-  const [nameInput, setNameInput] = useState("");
   const [readings, setReadings] = useState<Reading[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -155,7 +155,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetch(`/api/today?name=${encodeURIComponent(name)}&timezone=${encodeURIComponent(timezone)}`)
+    fetch(`/api/today?timezone=${encodeURIComponent(timezone)}`)
       .then((res) => {
         if (!res.ok) throw new Error("failed to load today's reading");
         return res.json();
@@ -186,7 +186,7 @@ export default function Home() {
       const res = await fetch("/api/today/next", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, timezone }),
+        body: JSON.stringify({ timezone }),
       });
       if (!res.ok) throw new Error("failed to generate the next reading");
       const { reading } = await res.json();
@@ -209,30 +209,7 @@ export default function Home() {
   }).format(new Date());
 
   if (name === null) {
-    return (
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!nameInput.trim()) return;
-          login(nameInput);
-        }}
-      >
-        <p className="text-sm text-[var(--ink-soft)]">{t("login.prompt")}</p>
-        <input
-          value={nameInput}
-          onChange={(e) => setNameInput(e.target.value)}
-          placeholder={t("login.namePlaceholder")}
-          className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
-        >
-          {t("login.start")}
-        </button>
-      </form>
-    );
+    return <AuthScreen />;
   }
 
   const reading = readings[index] ?? null;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles } from "@/db/schema";
+import { authErrorResponse, requireProfile } from "@/lib/authProfile";
 
 function isValidTimezone(tz: unknown): tz is string {
   if (typeof tz !== "string" || !tz) return false;
@@ -17,11 +18,11 @@ function isValidTimezone(tz: unknown): tz is string {
 // server-side code with no request/session context (the morning-reminder cron) can still compose
 // text in the right language and know the profile's own day boundary. Fire-and-forget from the
 // client — never blocks or surfaces errors to the user. Either field is optional per-call so this
-// can be used to update just one of them.
+// can be used to update just one of them. A no-op (not an error) if this is called before the
+// profile-claim onboarding step has happened yet, since ProfileSettingsSync fires on every
+// uiLang/timezone change regardless of auth state.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const name = body?.name?.trim();
-  if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   const update: { uiLang?: "ko" | "en"; timezone?: string } = {};
   if (body?.uiLang === "ko" || body?.uiLang === "en") update.uiLang = body.uiLang;
@@ -31,6 +32,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "at least one of uiLang/timezone is required" }, { status: 400 });
   }
 
-  await db.update(profiles).set(update).where(eq(profiles.name, name));
-  return NextResponse.json({ status: "ok" });
+  try {
+    const profile = await requireProfile();
+    await db.update(profiles).set(update).where(eq(profiles.id, profile.id));
+    return NextResponse.json({ status: "ok" });
+  } catch (err) {
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return NextResponse.json({ status: "ok" });
+    throw err;
+  }
 }

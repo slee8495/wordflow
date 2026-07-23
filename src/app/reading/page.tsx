@@ -12,6 +12,7 @@ import {
   readingActivityHeading,
   type UiStringKey,
 } from "@/lib/i18n";
+import { AuthScreen } from "../AuthScreen";
 import { usePlayback } from "../PlaybackProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
@@ -121,7 +122,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetch(`/api/reading/progress?name=${encodeURIComponent(name)}&scope=${scope}`)
+    fetch(`/api/reading/progress?scope=${scope}`)
       .then((res) => {
         if (!res.ok) throw new Error("failed to load progress");
         return res.json();
@@ -256,10 +257,9 @@ function BookGrid({
 }
 
 export default function ReadingPage() {
-  const { name, login } = useUser();
+  const { name } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex: globalActiveChunkIndex, playText, pause, resume, stop } = usePlayback();
-  const [nameInput, setNameInput] = useState("");
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [subTab, setSubTab] = useState<"browse" | "progress">("browse");
   const [selectedBook, setSelectedBook] = useState<string | null>(null);
@@ -298,9 +298,7 @@ export default function ReadingPage() {
     // cleanup function React runs before the next effect (or unmount), so a superseded request's
     // response is a no-op instead of clobbering whatever the current selection actually is.
     let cancelled = false;
-    fetch(
-      `/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}&name=${encodeURIComponent(name)}`,
-    )
+    fetch(`/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}`)
       .then((res) => {
         if (!res.ok) throw new Error("failed to load passage");
         return res.json();
@@ -333,30 +331,7 @@ export default function ReadingPage() {
   const book = BIBLE_BOOKS.find((b) => b.name === selectedBook) ?? null;
 
   if (name === null) {
-    return (
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!nameInput.trim()) return;
-          login(nameInput);
-        }}
-      >
-        <p className="text-sm text-[var(--ink-soft)]">{t("login.prompt")}</p>
-        <input
-          value={nameInput}
-          onChange={(e) => setNameInput(e.target.value)}
-          placeholder={t("login.namePlaceholder")}
-          className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--clay)]"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)]"
-        >
-          {t("login.start")}
-        </button>
-      </form>
-    );
+    return <AuthScreen />;
   }
 
   return (

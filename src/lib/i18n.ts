@@ -18,6 +18,25 @@ const STRINGS = {
   "login.namePlaceholder": { ko: "이름", en: "Name" },
   "login.start": { ko: "시작", en: "Start" },
   "login.submit": { ko: "로그인", en: "Log in" },
+  "login.loading": { ko: "불러오는 중…", en: "Loading…" },
+  "login.signInWithGoogle": { ko: "Google로 로그인", en: "Sign in with Google" },
+  "login.claimTitle": {
+    ko: "기존에 쓰던 이름이 있나요?",
+    en: "Do you have an existing name you used before?",
+  },
+  "login.claimHint": {
+    ko: "있으면 그 이름을 입력해서 읽기 진도를 이어받으세요. 없으면 새 이름을 입력해서 시작하세요.",
+    en: "If so, enter it to carry over your reading progress. Otherwise, enter a new name to start fresh.",
+  },
+  "login.claimSubmit": { ko: "계속", en: "Continue" },
+  "login.claimNameTaken": {
+    ko: "이미 다른 계정과 연결된 이름이에요. 다른 이름을 입력해주세요.",
+    en: "That name is already linked to a different account. Try another one.",
+  },
+  "login.claimFailed": {
+    ko: "문제가 발생했어요. 다시 시도해주세요.",
+    en: "Something went wrong. Please try again.",
+  },
 
   "today.changeName": { ko: "이름 변경", en: "Change name" },
   "today.preparing": {

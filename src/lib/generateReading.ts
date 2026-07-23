@@ -514,33 +514,14 @@ export async function getTodayReadings(profile: Profile) {
   );
 }
 
-// Two brand-new tabs/requests for the same never-seen-before name can both pass the "no existing
-// profile" check before either has inserted — onConflictDoNothing turns the loser's unique-
-// constraint violation (profiles.name is unique) into a no-op insert instead of a thrown error,
-// and the re-select below fetches the row the winner actually created.
-export async function findOrCreateProfile(name: string): Promise<Profile> {
-  const [existing] = await db.select().from(profiles).where(eq(profiles.name, name)).limit(1);
-  if (existing) return existing;
-
-  const [created] = await db
-    .insert(profiles)
-    .values({ name })
-    .onConflictDoNothing({ target: profiles.name })
-    .returning();
-  if (created) return created;
-
-  const [raced] = await db.select().from(profiles).where(eq(profiles.name, name)).limit(1);
-  if (!raced) throw new Error(`Failed to find or create profile "${name}"`);
-  return raced;
-}
-
 // Updates + returns the profile with a client-supplied timezone applied immediately, instead of
 // waiting on ProfileSettingsSync's separate POST to land first. Without this, a profile's very
 // first request of the day (the one that actually decides that day's forDate) could race ahead of
 // the sync and generate against DEFAULT_TIMEZONE — a mistake that then persists for that whole
-// calendar day. Every read-heavy route that calls findOrCreateProfile and then immediately does
-// something forDate-sensitive (generateDailyReading, getTodayReadings, etc.) should pass through
-// here first with whatever timezone the client's TimezoneProvider currently has.
+// calendar day. Every read-heavy route that calls requireProfile() (src/lib/authProfile.ts) and
+// then immediately does something forDate-sensitive (generateDailyReading, getTodayReadings,
+// etc.) should pass through here first with whatever timezone the client's TimezoneProvider
+// currently has.
 export async function syncProfileTimezone(profile: Profile, timezone: string | null | undefined): Promise<Profile> {
   if (!timezone || profile.timezone === timezone) return profile;
   const [updated] = await db.update(profiles).set({ timezone }).where(eq(profiles.id, profile.id)).returning();
