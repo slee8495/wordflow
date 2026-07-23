@@ -5,6 +5,7 @@ import { splitIntoChunks } from "@/lib/speak";
 import { dateStringInTimezone, shiftDateString } from "@/lib/date";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
+import { ChevronButton, ChevronIcon } from "./ChevronIcon";
 import { AuthScreen } from "./AuthScreen";
 import { usePlayback } from "./PlaybackProvider";
 import { useTimezone } from "./TimezoneProvider";
@@ -261,23 +262,10 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={goToPreviousDay}
-            aria-label={t("today.previousDay")}
-            className="text-sm text-[var(--ink-soft)] hover:text-[var(--ink)]"
-          >
-            ←
-          </button>
+        <div className="flex items-center gap-1">
+          <ChevronButton direction="left" onClick={goToPreviousDay} ariaLabel={t("today.previousDay")} />
           <span className="text-sm text-[var(--ink-soft)]">{dayLabel}</span>
-          <button
-            onClick={goToNextDay}
-            disabled={isToday}
-            aria-label={t("today.nextDay")}
-            className="text-sm text-[var(--ink-soft)] hover:text-[var(--ink)] disabled:opacity-30 disabled:hover:text-[var(--ink-soft)]"
-          >
-            →
-          </button>
+          <ChevronButton direction="right" onClick={goToNextDay} disabled={isToday} ariaLabel={t("today.nextDay")} />
         </div>
         <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
           <button
@@ -329,7 +317,7 @@ export default function Home() {
             disabled={index === 0}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
-            ← {t("today.previousPassage")}
+            <ChevronIcon direction="left" className="mr-1" /> {t("today.previousPassage")}
           </button>
           <span className="text-xs text-[var(--ink-soft)]">{passageOfLabel(uiLang, index + 1, readings.length)}</span>
           <button
@@ -337,7 +325,7 @@ export default function Home() {
             disabled={index === readings.length - 1}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--clay-tint)] disabled:opacity-30 disabled:hover:bg-transparent"
           >
-            {t("today.nextPassage")} →
+            {t("today.nextPassage")} <ChevronIcon direction="right" className="ml-1" />
           </button>
         </div>
       )}
@@ -454,7 +442,13 @@ export default function Home() {
               disabled={generatingNext}
               className="rounded-lg border border-dashed border-[var(--line)] px-3 py-2 text-sm text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
             >
-              {generatingNext ? t("today.generating") : t("today.doneReadNext")}
+              {generatingNext ? (
+                t("today.generating")
+              ) : (
+                <>
+                  {t("today.doneReadNext")} <ChevronIcon direction="right" className="ml-1" />
+                </>
+              )}
             </button>
           )}
         </>

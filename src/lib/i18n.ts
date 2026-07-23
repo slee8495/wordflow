@@ -45,8 +45,8 @@ const STRINGS = {
   },
   "today.previousPassage": { ko: "이전 본문", en: "Previous passage" },
   "today.nextPassage": { ko: "다음 본문", en: "Next passage" },
-  "today.previousDay": { ko: "← 이전 날", en: "← Previous day" },
-  "today.nextDay": { ko: "다음 날 →", en: "Next day →" },
+  "today.previousDay": { ko: "이전 날", en: "Previous day" },
+  "today.nextDay": { ko: "다음 날", en: "Next day" },
   "today.noReadingThisDay": {
     ko: "이 날은 읽은 기록이 없어요.",
     en: "No reading recorded for this day.",
@@ -58,8 +58,8 @@ const STRINGS = {
   "today.byVerse": { ko: "절별로", en: "By Verse" },
   "today.asStory": { ko: "이야기로", en: "As a Story" },
   "today.doneReadNext": {
-    ko: "오늘 완료 — 다음 본문 읽기 →",
-    en: "Done for today — read the next passage →",
+    ko: "오늘 완료 — 다음 본문 읽기",
+    en: "Done for today — read the next passage",
   },
   "today.generating": { ko: "생성 중…", en: "Generating…" },
 
@@ -120,7 +120,7 @@ const STRINGS = {
 
   "reading.browseTab": { ko: "찾아보기", en: "Browse" },
   "reading.progressTab": { ko: "진행 상황", en: "Progress" },
-  "reading.backToBooks": { ko: "← 목록", en: "← Books" },
+  "reading.backToBooks": { ko: "목록", en: "Books" },
   "reading.loading": {
     ko: "본문을 불러오고 있어요. 조금만 기다려 주세요…",
     en: "Loading the passage. This may take a moment…",

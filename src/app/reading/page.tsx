@@ -13,6 +13,7 @@ import {
   type UiStringKey,
 } from "@/lib/i18n";
 import { AuthScreen } from "../AuthScreen";
+import { ChevronIcon } from "../ChevronIcon";
 import { usePlayback } from "../PlaybackProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
@@ -396,9 +397,9 @@ export default function ReadingPage() {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setSelectedBook(null)}
-            className="self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
+            className="flex items-center gap-1 self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
           >
-            {t("reading.backToBooks")}
+            <ChevronIcon direction="left" /> {t("reading.backToBooks")}
           </button>
           <h2 className="text-sm font-semibold">{selectedBook}</h2>
           <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
@@ -419,9 +420,9 @@ export default function ReadingPage() {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setSelectedChapter(null)}
-            className="self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
+            className="flex items-center gap-1 self-start text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
           >
-            ← {selectedBook}
+            <ChevronIcon direction="left" /> {selectedBook}
           </button>
           <section className="rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
