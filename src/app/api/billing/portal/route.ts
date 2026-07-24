@@ -3,12 +3,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { authErrorResponse, requireProfile } from "@/lib/authProfile";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 // Opens Stripe's own hosted Billing Portal (cancel/upgrade/update card) for a profile that's
 // already checked out at least once.
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripe();
     const profile = await requireProfile();
     const [user] = await db.select().from(users).where(eq(users.id, profile.userId!)).limit(1);
     if (!user?.stripeCustomerId) {

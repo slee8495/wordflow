@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { authErrorResponse, requireProfile } from "@/lib/authProfile";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 // Starts a Stripe Checkout session for the $3.99/mo subscription with a 7-day trial. Deliberately
 // uses requireProfile(), not requireEntitledProfile() — this is how someone *without* access gets
@@ -12,6 +12,7 @@ import { stripe } from "@/lib/stripe";
 // without relying on email matching.
 export async function POST(req: NextRequest) {
   try {
+    const stripe = getStripe();
     const profile = await requireProfile();
     const session = await auth();
     const email = session?.user?.email ?? undefined;
