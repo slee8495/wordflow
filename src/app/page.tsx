@@ -7,6 +7,7 @@ import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRe
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
 import { ChevronButton, ChevronIcon } from "./ChevronIcon";
 import { AuthScreen } from "./AuthScreen";
+import { PaywallScreen } from "./PaywallScreen";
 import { usePlayback } from "./PlaybackProvider";
 import { useTimezone } from "./TimezoneProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
@@ -129,7 +130,7 @@ function Section({
 }
 
 export default function Home() {
-  const { name, logout } = useUser();
+  const { name, plan } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { timezone } = useTimezone();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex, playText, pause, resume, stop } = usePlayback();
@@ -159,7 +160,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!name) return;
+    if (!name || !plan?.hasAccess) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
@@ -179,7 +180,7 @@ export default function Home() {
       })
       .catch(() => setError("errors.loadToday"))
       .finally(() => setLoading(false));
-  }, [name, timezone, viewDate]);
+  }, [name, plan?.hasAccess, timezone, viewDate]);
 
   function goToPreviousDay() {
     setViewDate(shiftDateString(effectiveDate, -1));
@@ -238,6 +239,9 @@ export default function Home() {
   if (name === null) {
     return <AuthScreen />;
   }
+  if (!plan?.hasAccess) {
+    return <PaywallScreen />;
+  }
 
   const reading = readings[index] ?? null;
   const pick = (en: string | null | undefined, ko: string) => (contentLanguage === "en" ? (en ?? ko) : ko);
@@ -291,18 +295,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-[var(--ink-soft)]">{greeting(uiLang, name)}</span>
-        <button
-          onClick={() => {
-            logout();
-            setReadings([]);
-          }}
-          className="text-xs text-[var(--ink-soft)] hover:text-[var(--ink)]"
-        >
-          {t("today.changeName")}
-        </button>
-      </div>
+      <p className="text-sm text-[var(--ink-soft)]">{greeting(uiLang, name)}</p>
 
       {loading && <p className="text-sm text-[var(--ink-soft)]">{t("today.preparing")}</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>}

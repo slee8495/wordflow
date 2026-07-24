@@ -10,6 +10,7 @@ import { bibleTextCache, deepReadingLogs, type Profile } from "@/db/schema";
 import { fetchNltPassage } from "@/lib/bible";
 import { MODEL } from "@/lib/ai/model";
 import { profileDateString } from "@/lib/date";
+import { KOREAN_STYLE_GUIDANCE } from "@/lib/generateReading";
 
 async function readCache(translation: string, book: string, chapter: number): Promise<string | null> {
   const [row] = await db
@@ -31,7 +32,8 @@ async function generateKoreanChapter(book: string, chapter: number, englishText:
       "당신은 성경 본문을 쉬운 한글로 옮기는 번역가입니다. 원문의 사건과 의미를 정확히 지키되, " +
       "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
       "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요. " +
-      "절 번호를 (1), (2)... 형식으로 붙여 절별로 줄바꿈해 적으세요. 다른 설명 없이 본문만 출력하세요.",
+      "절 번호를 (1), (2)... 형식으로 붙여 절별로 줄바꿈해 적으세요. 다른 설명 없이 본문만 출력하세요. " +
+      KOREAN_STYLE_GUIDANCE,
     prompt: `본문: ${book} ${chapter}장\n\n영어 NLT 원문:\n${englishText}`,
   });
   return text.trim();

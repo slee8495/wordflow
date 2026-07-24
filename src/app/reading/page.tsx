@@ -13,6 +13,7 @@ import {
   type UiStringKey,
 } from "@/lib/i18n";
 import { AuthScreen } from "../AuthScreen";
+import { PaywallScreen } from "../PaywallScreen";
 import { ChevronIcon } from "../ChevronIcon";
 import { usePlayback } from "../PlaybackProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
@@ -258,7 +259,7 @@ function BookGrid({
 }
 
 export default function ReadingPage() {
-  const { name } = useUser();
+  const { name, plan } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex: globalActiveChunkIndex, playText, pause, resume, stop } = usePlayback();
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
@@ -286,7 +287,7 @@ export default function ReadingPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedBook || !selectedChapter || !name) return;
+    if (!selectedBook || !selectedChapter || !name || !plan?.hasAccess) return;
     if (isSpeakingThisPassage) stop();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
@@ -322,7 +323,7 @@ export default function ReadingPage() {
     // isSpeakingThisPassage/stop deliberately excluded — this should only re-run on book/chapter/
     // lang/name changes, not every time global playback state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBook, selectedChapter, contentLanguage, name]);
+  }, [selectedBook, selectedChapter, contentLanguage, name, plan?.hasAccess]);
 
   function setLanguage(lang: "ko" | "en") {
     setContentLanguage(lang);
@@ -333,6 +334,9 @@ export default function ReadingPage() {
 
   if (name === null) {
     return <AuthScreen />;
+  }
+  if (!plan?.hasAccess) {
+    return <PaywallScreen />;
   }
 
   return (

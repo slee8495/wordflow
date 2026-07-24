@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReadingProgress } from "@/lib/progress";
-import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { authErrorResponse, requireEntitledProfile } from "@/lib/authProfile";
 
 export async function GET(req: NextRequest) {
   const scopeParam = req.nextUrl.searchParams.get("scope");
   const scope = scopeParam === "all" ? "all" : "cycle";
 
   try {
-    const profile = await requireProfile();
+    const profile = await requireEntitledProfile();
     const progress = await getReadingProgress(profile, scope);
     return NextResponse.json({ progress });
   } catch (err) {

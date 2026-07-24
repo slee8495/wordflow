@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTodayReadings, syncProfileTimezone } from "@/lib/generateReading";
-import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { authErrorResponse, requireEntitledProfile } from "@/lib/authProfile";
 
 // Generous enough to cover the worst case where this request's own generation is synchronous
 // (no prefetch buffer existed yet, ~30-40s observed) *and* the after()-scheduled background
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const timezone = req.nextUrl.searchParams.get("timezone");
 
   try {
-    const profile = await syncProfileTimezone(await requireProfile(), timezone);
+    const profile = await syncProfileTimezone(await requireEntitledProfile(), timezone);
     const readings = await getTodayReadings(profile);
     return NextResponse.json({ readings });
   } catch (err) {

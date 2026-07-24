@@ -30,6 +30,21 @@ export const users = pgTable("user", {
   email: text("email").unique(),
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
+
+  // --- Stripe billing ($3.99/mo, 7-day trial via Stripe Checkout) ---
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  // Mirrors the Stripe Subscription object's own `status` (trialing/active/past_due/canceled/...)
+  // — only ever written by the /api/billing/webhook handler, never computed locally, so it always
+  // reflects Stripe's source of truth.
+  subscriptionStatus: varchar("subscription_status", { length: 32 }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+
+  // --- Comp access, independent of Stripe (see src/lib/entitlement.ts) ---
+  // Permanent free access, granted by redeeming FAMILY_PASSPHRASE in Settings.
+  compFreeForever: boolean("comp_free_forever").default(false).notNull(),
+  // Time-limited free access an admin can grant from /admin (e.g. a 1-year comp).
+  compFreeUntil: date("comp_free_until"),
 });
 
 export const accounts = pgTable(
@@ -175,14 +190,17 @@ export const readings = pgTable("readings", {
     .references(() => curriculumItems.id),
   forDate: date("for_date").notNull(),
 
-  theme: varchar("theme", { length: 128 }).notNull(),
+  // Was varchar(128) — the model's "one-line theme" isn't reliably under 128 characters (English
+  // themes in particular run long), and a Postgres varchar overflow (error 22001) failed the
+  // whole insert/update. text has no such limit, matching the other generated fields below.
+  theme: text("theme").notNull(),
   storySummary: text("story_summary").notNull(),
   historicalContext: text("historical_context").notNull(),
   personalMessage: text("personal_message").notNull(),
 
   // English counterparts of the four fields above, written in the same generateObject
   // call — lets the UI offer a content-language toggle independent of the passage text.
-  themeEn: varchar("theme_en", { length: 128 }),
+  themeEn: text("theme_en"),
   storySummaryEn: text("story_summary_en"),
   historicalContextEn: text("historical_context_en"),
   personalMessageEn: text("personal_message_en"),
@@ -245,6 +263,7 @@ export const bibleTextCache = pgTable(
   (t) => [unique().on(t.translation, t.book, t.chapter)],
 );
 
+export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
 export type Reading = typeof readings.$inferSelect;

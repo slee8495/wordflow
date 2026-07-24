@@ -70,6 +70,20 @@ async function withRetry<T>(fn: () => Promise<T>, isValid: (value: T) => boolean
   return result;
 }
 
+// Shared guidance for every prompt that renders Korean Bible text — addresses two recurring
+// quality issues: (1) names/places rendered as ad-hoc phonetic transliterations of the English
+// NLT spelling instead of the long-established Korean Bible spelling (e.g. "캐나안" instead of
+// "가나안"), and (2) sibling terms translated as a flat "brother"/"sister" without accounting for
+// actual birth order — e.g. Joseph (younger than 10 of his brothers, older than Benjamin) getting
+// mislabeled as everyone's "형" instead of "형들의 동생이자 베냐민의 형".
+export const KOREAN_STYLE_GUIDANCE =
+  "인명·지명은 영어 철자를 그대로 음역하지 말고, 한국어 성경(개역개정/새번역/쉬운성경)에서 널리 쓰이는 " +
+  "표준 표기를 따르세요 (예: '가나안'이 맞고 '캐나안'은 틀림). " +
+  "여러 형제를 뭉뚱그려 가리킬 때(예: 요셉을 판 형제들 전체)는 나이 순서를 단정하지 말고 중립적인 " +
+  "'형제들'을 쓰세요 — 이 경우 무조건 'brother'를 '형'으로 옮기지 마세요. 성경에 나이 순서가 명확한 " +
+  "두 사람을 직접 비교할 때만(예: 형인 에서와 동생인 야곱, 형들보다 어리고 베냐민보다는 손위인 요셉처럼) " +
+  "'형'과 '동생'을 정확히 구분해서 쓰고, 그 관계가 확실하지 않으면 절대 추측하지 말고 중립적인 '형제'를 쓰세요.";
+
 const bilingualField = (description: string) =>
   z.object({
     ko: z.string().describe(`${description} (Korean)`),
@@ -116,7 +130,8 @@ async function generateKoreanPassage(reference: string, englishText: string | nu
           "성경을 처음 읽는 사람도 이해할 수 있는 쉬운성경 스타일의 자연스러운 한글로 표현하세요. " +
           "새로운 내용을 지어내지 말고 주어진 영어 본문(NLT)의 내용에 충실하게 옮기세요. " +
           "story 버전은 verses 버전을 요약한 것이 아닙니다 — 모든 절의 내용을 빠짐없이 담아 절 번호만 " +
-          "빼고 이야기체 문장으로 자연스럽게 이어붙이세요.",
+          "빼고 이야기체 문장으로 자연스럽게 이어붙이세요. " +
+          KOREAN_STYLE_GUIDANCE,
         prompt: [
           `본문: ${reference}`,
           englishText ? `영어 NLT 원문:\n${englishText}` : null,
@@ -163,7 +178,7 @@ async function fetchPassageTexts(passageRef: string) {
 // pure function of the passage itself, with no profile-specific input anywhere in how it's
 // produced. Shared type between generateFreshContent's return and the readings-table columns it
 // gets copied into/out of.
-type ReadingContent = {
+export type ReadingContent = {
   theme: string;
   storySummary: string;
   historicalContext: string;
@@ -200,7 +215,10 @@ const CONTENT_COLUMNS = {
 // Actually calls the model — fetches passage text, writes the theme/story/context/message
 // commentary, and looks up a worship song. Nothing here reads anything profile-specific, so its
 // output is safe to reuse for every profile that ever reaches this curriculum item.
-async function generateFreshContent(item: CurriculumItem): Promise<ReadingContent> {
+// Exported (not just used internally by buildReadingForItem) so one-off maintenance scripts —
+// e.g. src/db/regenerateContent.ts — can re-run generation for an already-generated curriculum
+// item after a prompt/quality fix, without duplicating this logic.
+export async function generateFreshContent(item: CurriculumItem): Promise<ReadingContent> {
   const { koVerses, koStory, en, enStory } = await fetchPassageTexts(item.passageRef);
 
   const { object } = await withRetry(
@@ -212,7 +230,8 @@ async function generateFreshContent(item: CurriculumItem): Promise<ReadingConten
           "You write short, engaging daily Bible reading companions for a personal QT-style app called Wordflow. " +
           "Tone: story-like, warm, never dry or academic. Write every field in BOTH Korean and English — the two " +
           "should carry the same meaning, not be a literal translation of each other, each natural in its own " +
-          "language. Keep each field to about 3-5 sentences (the whole thing should read aloud in roughly 5 minutes).",
+          "language. Keep each field to about 3-5 sentences (the whole thing should read aloud in roughly 5 minutes). " +
+          `For the Korean fields: ${KOREAN_STYLE_GUIDANCE}`,
         prompt: [
           `Today's passage: ${item.passageRef} (theme bucket: ${item.theme})`,
           koStory ? `한글 본문(이야기체):\n${koStory}` : null,

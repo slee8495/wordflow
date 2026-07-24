@@ -12,6 +12,14 @@ import { useTimezone } from "../TimezoneProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
 
+function formatPlanDate(iso: string, lang: "ko" | "en"): string {
+  return new Intl.DateTimeFormat(lang === "ko" ? "ko-KR" : "en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
 function formatHourLabel(hour: number, lang: "ko" | "en"): string {
   const d = new Date();
   d.setHours(hour, 0, 0, 0);
@@ -20,13 +28,17 @@ function formatHourLabel(hour: number, lang: "ko" | "en"): string {
 
 export default function SettingsPage() {
   const { scale, setScale } = useFontScale();
-  const { name, logout } = useUser();
+  const { name, plan, logout, refreshPlan } = useUser();
   const { uiLang, setUiLang, t } = useUiLanguage();
   const { timezone, setTimezone } = useTimezone();
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [notificationHour, setNotificationHour] = useState(DEFAULT_NOTIFICATION_HOUR);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationsError, setNotificationsError] = useState<UiStringKey | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
+  const [passphraseBusy, setPassphraseBusy] = useState(false);
+  const [passphraseError, setPassphraseError] = useState<UiStringKey | null>(null);
 
   useEffect(() => {
     if (!name) return;
@@ -71,6 +83,54 @@ export default function SettingsPage() {
     if (name && notificationsOn) await updateNotificationHour(hour);
   }
 
+  async function startCheckout() {
+    if (planBusy) return;
+    setPlanBusy(true);
+    try {
+      const res = await fetch("/api/billing/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else setPlanBusy(false);
+    } catch {
+      setPlanBusy(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    if (planBusy) return;
+    setPlanBusy(true);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else setPlanBusy(false);
+    } catch {
+      setPlanBusy(false);
+    }
+  }
+
+  async function submitPassphrase(e: React.FormEvent) {
+    e.preventDefault();
+    if (!passphrase.trim() || passphraseBusy) return;
+    setPassphraseBusy(true);
+    setPassphraseError(null);
+    try {
+      const res = await fetch("/api/billing/redeem-passphrase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passphrase }),
+      });
+      if (!res.ok) {
+        setPassphraseError("plan.passphraseInvalid");
+        return;
+      }
+      setPassphrase("");
+      await refreshPlan();
+    } finally {
+      setPassphraseBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-[var(--ink)]">{t("settings.title")}</h1>
@@ -93,6 +153,66 @@ export default function SettingsPage() {
         )}
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.nameHint")}</p>
       </section>
+
+      {name && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
+          <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("plan.title")}</h2>
+          {plan?.compFreeForever ? (
+            <p className="text-sm text-[var(--ink)]">{t("plan.freeFamily")}</p>
+          ) : plan?.hasAccess ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-[var(--ink)]">
+                {plan.subscriptionStatus === "trialing"
+                  ? plan.currentPeriodEnd
+                    ? `${t("plan.trialEndsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
+                    : t("plan.trialActive")
+                  : plan.currentPeriodEnd
+                    ? `${t("plan.renewsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
+                    : t("plan.active")}
+              </p>
+              <button
+                type="button"
+                onClick={openBillingPortal}
+                disabled={planBusy}
+                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+              >
+                {t("plan.manageBilling")}
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-[var(--ink-soft)]">{t("plan.expiredHint")}</p>
+              <button
+                type="button"
+                onClick={startCheckout}
+                disabled={planBusy}
+                className="w-fit rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)] disabled:opacity-50"
+              >
+                {t("plan.subscribeCta")}
+              </button>
+            </div>
+          )}
+
+          {!plan?.compFreeForever && (
+            <form onSubmit={submitPassphrase} className="flex items-center gap-2">
+              <input
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder={t("plan.passphrasePlaceholder")}
+                className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--clay)]"
+              />
+              <button
+                type="submit"
+                disabled={passphraseBusy}
+                className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+              >
+                {t("plan.passphraseSubmit")}
+              </button>
+            </form>
+          )}
+          {passphraseError && <p className="text-sm text-red-600 dark:text-red-400">{t(passphraseError)}</p>}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
         <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("settings.uiLanguage")}</h2>

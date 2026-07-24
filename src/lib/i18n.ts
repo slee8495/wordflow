@@ -38,7 +38,6 @@ const STRINGS = {
     en: "Something went wrong. Please try again.",
   },
 
-  "today.changeName": { ko: "이름 변경", en: "Change name" },
   "today.preparing": {
     ko: "오늘의 말씀을 준비하고 있어요. 조금만 기다려 주세요…",
     en: "Preparing today's reading. This may take a moment…",
@@ -62,6 +61,31 @@ const STRINGS = {
     en: "Done for today — read the next passage",
   },
   "today.generating": { ko: "생성 중…", en: "Generating…" },
+
+  "plan.title": { ko: "요금제", en: "Plan" },
+  "plan.freeFamily": { ko: "무료 (가족)", en: "Free (family)" },
+  "plan.trialActive": { ko: "무료 체험 중", en: "Free trial active" },
+  "plan.trialEndsOn": { ko: "무료 체험 종료일:", en: "Trial ends" },
+  "plan.active": { ko: "구독 중", en: "Subscription active" },
+  "plan.renewsOn": { ko: "다음 결제일:", en: "Renews" },
+  "plan.manageBilling": { ko: "결제 관리", en: "Manage billing" },
+  "plan.expiredHint": {
+    ko: "7일 무료 체험 후 월 $3.99가 결제돼요. 체험 종료 전 언제든 취소할 수 있어요.",
+    en: "7-day free trial, then $3.99/month. Cancel anytime before the trial ends.",
+  },
+  "plan.subscribeCta": { ko: "무료 체험 시작하기", en: "Start free trial" },
+  "plan.passphrasePlaceholder": { ko: "가족 패스프레이즈", en: "Family passphrase" },
+  "plan.passphraseSubmit": { ko: "확인", en: "Redeem" },
+  "plan.passphraseInvalid": { ko: "패스프레이즈가 올바르지 않아요.", en: "That passphrase isn't valid." },
+  "plan.paywallTitle": {
+    ko: "무료 체험이 끝났거나 구독이 필요해요",
+    en: "Your trial has ended or a subscription is needed",
+  },
+  "plan.paywallHint": {
+    ko: "7일 무료 체험 후 월 $3.99예요. 언제든 취소할 수 있어요.",
+    en: "7-day free trial, then $3.99/month. Cancel anytime.",
+  },
+  "plan.startingCheckout": { ko: "이동 중…", en: "Redirecting…" },
 
   "settings.title": { ko: "설정", en: "Settings" },
   "settings.account": { ko: "계정", en: "Account" },

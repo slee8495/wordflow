@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNextReading, syncProfileTimezone } from "@/lib/generateReading";
-import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { authErrorResponse, requireEntitledProfile } from "@/lib/authProfile";
 
 // See src/app/api/today/route.ts for why this is 120 rather than 60 — the after()-scheduled
 // background prefetch this triggers counts against the same ceiling as the request itself.
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const { timezone } = await req.json().catch(() => ({ timezone: null }));
 
   try {
-    const profile = await syncProfileTimezone(await requireProfile(), timezone);
+    const profile = await syncProfileTimezone(await requireEntitledProfile(), timezone);
     const reading = await generateNextReading(profile);
     return NextResponse.json({ reading });
   } catch (err) {

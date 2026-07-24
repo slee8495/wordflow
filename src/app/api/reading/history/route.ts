@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReadingsForDate } from "@/lib/generateReading";
-import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { authErrorResponse, requireEntitledProfile } from "@/lib/authProfile";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const profile = await requireProfile();
+    const profile = await requireEntitledProfile();
     const readings = await getReadingsForDate(profile, date);
     return NextResponse.json({ readings });
   } catch (err) {
