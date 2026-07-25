@@ -83,6 +83,26 @@ function speakWithBrowserVoice(text: string, onStart?: () => void) {
   window.speechSynthesis.speak(utterance);
 }
 
+// Tells the OS-level media session (lock screen / notification player) the clip's real duration
+// and current position, so it can show a live remaining-time/scrubber instead of nothing — without
+// this, iOS in particular shows play/pause controls with no sense of progress. Wrapped defensively
+// since setPositionState throws if duration isn't a finite positive number yet (e.g. right as a
+// new clip's metadata is still loading).
+function updatePositionState(audio: HTMLAudioElement) {
+  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      playbackRate: audio.playbackRate || 1,
+      position: Math.min(audio.currentTime, audio.duration),
+    });
+  } catch {
+    // Some browsers throw if called at the "wrong" moment (e.g. mid-source-change) — position
+    // state is a nice-to-have, never worth surfacing an error over.
+  }
+}
+
 // A hard stop: abandons whatever's currently playing/preparing and unblocks speak()'s awaited
 // promise so a caller's `await speak(...)` reliably returns instead of hanging forever.
 export function stopSpeaking() {
@@ -102,6 +122,7 @@ export function stopSpeaking() {
 // via resumeSpeaking(), not jump ahead or fall back to the browser voice.
 export function pauseSpeaking() {
   currentAudio?.pause();
+  if (currentAudio) updatePositionState(currentAudio);
   if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
     window.speechSynthesis.pause();
   }
@@ -122,6 +143,7 @@ export async function resumeSpeaking(): Promise<boolean> {
   if (!currentAudio) return false;
   try {
     await currentAudio.play();
+    if (!currentAudio.paused) updatePositionState(currentAudio);
     return !currentAudio.paused;
   } catch {
     return false;
@@ -239,6 +261,7 @@ export async function speak(
       announced = true;
       opts.onPlaybackStart?.();
       opts.onChunkStart?.(offsets[0].index);
+      updatePositionState(audio);
     };
     const onTimeUpdate = () => {
       const t = audio.currentTime;
@@ -248,6 +271,7 @@ export async function speak(
         else break;
       }
       opts.onChunkStart?.(current);
+      updatePositionState(audio);
     };
     const onEnded = () => finish();
     const onError = () => finish();
