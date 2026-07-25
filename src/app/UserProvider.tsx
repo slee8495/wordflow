@@ -17,6 +17,14 @@ export type PlanInfo = {
   compFreeUntil: string | null;
 };
 
+export type ReadingBookmark = { book: string; chapter: number; chunkIndex: number; lang: "ko" | "en" };
+export type TodayBookmark = {
+  section: "context" | "passage" | "message";
+  chunkIndex: number;
+  lang: "ko" | "en";
+  view?: "verses" | "story";
+};
+
 type UserContextValue = {
   status: AuthStatus;
   // Non-null only when status === "ready" — mirrors the old pre-auth shape so most consumers
@@ -25,6 +33,11 @@ type UserContextValue = {
   // Set in the same response/effect as `name`, so by the time `name !== null`, `plan` is
   // guaranteed already populated too — no loading-flash risk for paywall checks.
   plan: PlanInfo | null;
+  // Last-known playback position for Reading tab / Today tab (see src/lib/bookmark.ts) — read
+  // once on mount alongside `name`/`plan`; each page writes new values itself via saveBookmark(),
+  // not through this context.
+  readingBookmark: ReadingBookmark | null;
+  todayBookmark: TodayBookmark | null;
   signInWithGoogle: () => void;
   logout: () => void;
   // Onboarding action: claims an existing pre-auth profile by name, or creates a new one if that
@@ -41,30 +54,47 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const [name, setName] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanInfo | null>(null);
+  const [readingBookmark, setReadingBookmark] = useState<ReadingBookmark | null>(null);
+  const [todayBookmark, setTodayBookmark] = useState<TodayBookmark | null>(null);
   const [profileChecked, setProfileChecked] = useState(false);
+
+  type MeResponse = {
+    status: string;
+    name?: string;
+    plan?: PlanInfo;
+    readingBookmark?: ReadingBookmark | null;
+    todayBookmark?: TodayBookmark | null;
+  };
+
+  const applyMeResponse = useCallback((data: MeResponse) => {
+    const ready = data.status === "ready";
+    setName(ready ? (data.name ?? null) : null);
+    setPlan(ready ? (data.plan ?? null) : null);
+    setReadingBookmark(ready ? (data.readingBookmark ?? null) : null);
+    setTodayBookmark(ready ? (data.todayBookmark ?? null) : null);
+  }, []);
 
   const refreshPlan = useCallback(async () => {
     const res = await fetch("/api/profile/me");
-    const data: { status: string; name?: string; plan?: PlanInfo } = await res.json();
-    setName(data.status === "ready" ? (data.name ?? null) : null);
-    setPlan(data.status === "ready" ? (data.plan ?? null) : null);
-  }, []);
+    applyMeResponse(await res.json());
+  }, [applyMeResponse]);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setName(null);
       setPlan(null);
+      setReadingBookmark(null);
+      setTodayBookmark(null);
       setProfileChecked(false);
       return;
     }
     let cancelled = false;
     fetch("/api/profile/me")
       .then((res) => res.json())
-      .then((data: { status: string; name?: string; plan?: PlanInfo }) => {
+      .then((data: MeResponse) => {
         if (cancelled) return;
-        setName(data.status === "ready" ? (data.name ?? null) : null);
-        setPlan(data.status === "ready" ? (data.plan ?? null) : null);
+        applyMeResponse(data);
         setProfileChecked(true);
       })
       .catch(() => {
@@ -74,7 +104,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [sessionStatus]);
+  }, [sessionStatus, applyMeResponse]);
 
   const status: AuthStatus =
     sessionStatus === "loading"
@@ -94,6 +124,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setName(null);
     setPlan(null);
+    setReadingBookmark(null);
+    setTodayBookmark(null);
     setProfileChecked(false);
     nextAuthSignOut();
   }, []);
@@ -121,7 +153,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   void session;
 
   return (
-    <UserContext.Provider value={{ status, name, plan, signInWithGoogle, logout, claimOrCreateProfile, refreshPlan }}>
+    <UserContext.Provider
+      value={{
+        status,
+        name,
+        plan,
+        readingBookmark,
+        todayBookmark,
+        signInWithGoogle,
+        logout,
+        claimOrCreateProfile,
+        refreshPlan,
+      }}
+    >
       {children}
     </UserContext.Provider>
   );

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { splitIntoChunks } from "@/lib/speak";
+import { saveBookmark } from "@/lib/bookmark";
 import { dateStringInTimezone, shiftDateString } from "@/lib/date";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
@@ -130,7 +131,7 @@ function Section({
 }
 
 export default function Home() {
-  const { name, plan } = useUser();
+  const { name, plan, todayBookmark } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { timezone } = useTimezone();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex, playText, pause, resume, stop } = usePlayback();
@@ -151,6 +152,46 @@ export default function Home() {
   function speakingSectionFor(id: string): { id: string; state: SpeakState } | null {
     return sourceId === sectionSourceId(id) && globalSpeakState ? { id, state: globalSpeakState } : null;
   }
+
+  // Saved chunk index only applies if it's for this exact section/language(/view, for passage) and
+  // still falls within the current text's chunk count (content can get regenerated after a quality
+  // fix, which would make an old index point at a different sentence or run past the end).
+  function resumeIndexFor(section: "context" | "passage" | "message", text: string | null): number | undefined {
+    if (!todayBookmark || !text || todayBookmark.section !== section || todayBookmark.lang !== contentLanguage) {
+      return undefined;
+    }
+    if (section === "passage" && todayBookmark.view !== passageView) return undefined;
+    return todayBookmark.chunkIndex < splitIntoChunks(text).length ? todayBookmark.chunkIndex : undefined;
+  }
+
+  // Mirrors activeChunkIndex without being a dependency of the autosave effect below — chunk index
+  // changes roughly every sentence, which would otherwise tear down and rebuild the 15s interval
+  // before it ever gets a chance to fire.
+  const activeChunkIndexRef = useRef<number | null>(null);
+  activeChunkIndexRef.current = activeChunkIndex;
+
+  // Best-effort autosave of playback position: immediately on pause/stop, and periodically while
+  // actively playing (covers someone who just closes the tab without pausing first).
+  useEffect(() => {
+    if (!sourceId?.startsWith("today-")) return;
+    const section = sourceId.slice("today-".length) as "context" | "passage" | "message";
+    const save = () => {
+      if (activeChunkIndexRef.current === null) return;
+      saveBookmark("today", {
+        section,
+        chunkIndex: activeChunkIndexRef.current,
+        lang: contentLanguage,
+        ...(section === "passage" ? { view: passageView } : {}),
+      });
+    };
+    if (globalSpeakState === "paused" || globalSpeakState === null) {
+      save();
+      return;
+    }
+    if (globalSpeakState !== "playing") return;
+    const interval = setInterval(save, 15000);
+    return () => clearInterval(interval);
+  }, [sourceId, globalSpeakState, contentLanguage, passageView]);
 
   useEffect(() => {
     const storedLang = localStorage.getItem(LANG_KEY);
@@ -331,9 +372,10 @@ export default function Home() {
 
           <Section
             title={t("today.contextTitle")}
-            onSpeak={() =>
-              speakSection("context", t("today.contextTitle"), pick(reading.historicalContextEn, reading.historicalContext))
-            }
+            onSpeak={() => {
+              const text = pick(reading.historicalContextEn, reading.historicalContext);
+              speakSection("context", t("today.contextTitle"), text, resumeIndexFor("context", text));
+            }}
             speakState={speakingSectionFor("context")?.state ?? null}
             onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
             onStop={stop}
@@ -352,7 +394,7 @@ export default function Home() {
             <Section
               title={t("today.passageTitle")}
               subtitle={rangeLabel}
-              onSpeak={() => speakSection("passage", t("today.passageTitle"), passageText ?? null)}
+              onSpeak={() => speakSection("passage", t("today.passageTitle"), passageText ?? null, resumeIndexFor("passage", passageText ?? null))}
               speakState={speakingSectionFor("passage")?.state ?? null}
               onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
               onStop={stop}
@@ -399,9 +441,10 @@ export default function Home() {
 
           <Section
             title={t("today.messageTitle")}
-            onSpeak={() =>
-              speakSection("message", t("today.messageTitle"), pick(reading.personalMessageEn, reading.personalMessage))
-            }
+            onSpeak={() => {
+              const text = pick(reading.personalMessageEn, reading.personalMessage);
+              speakSection("message", t("today.messageTitle"), text, resumeIndexFor("message", text));
+            }}
             speakState={speakingSectionFor("message")?.state ?? null}
             onPauseToggle={() => (globalSpeakState === "paused" ? resume() : pause())}
             onStop={stop}

@@ -70,19 +70,28 @@ async function withRetry<T>(fn: () => Promise<T>, isValid: (value: T) => boolean
   return result;
 }
 
-// Shared guidance for every prompt that renders Korean Bible text — addresses two recurring
-// quality issues: (1) names/places rendered as ad-hoc phonetic transliterations of the English
-// NLT spelling instead of the long-established Korean Bible spelling (e.g. "캐나안" instead of
-// "가나안"), and (2) sibling terms translated as a flat "brother"/"sister" without accounting for
-// actual birth order — e.g. Joseph (younger than 10 of his brothers, older than Benjamin) getting
-// mislabeled as everyone's "형" instead of "형들의 동생이자 베냐민의 형".
+// Shared guidance for every prompt that renders Korean Bible text — addresses recurring quality
+// issues: (1) names/places rendered as ad-hoc phonetic transliterations of the English NLT
+// spelling instead of the long-established Korean Bible spelling (e.g. "캐나안" instead of
+// "가나안", "떤기나무" instead of "떨기나무"), (2) sibling terms translated as a flat "brother"/
+// "sister" without accounting for actual birth order — e.g. Joseph (younger than 10 of his
+// brothers, older than Benjamin) getting mislabeled as everyone's "형" instead of "형들의 동생이자
+// 베냐민의 형" — and (3) speech level (존댓말/반말) not reflecting who outranks whom — e.g. God
+// addressing Jacob, or Jacob (father) addressing Joseph (son), rendered in deferential 존댓말 as if
+// the higher-status speaker were being polite to the lower-status one, which reads backwards in
+// Korean.
 export const KOREAN_STYLE_GUIDANCE =
-  "인명·지명은 영어 철자를 그대로 음역하지 말고, 한국어 성경(개역개정/새번역/쉬운성경)에서 널리 쓰이는 " +
-  "표준 표기를 따르세요 (예: '가나안'이 맞고 '캐나안'은 틀림). " +
+  "인명·지명 등 고유명사는 영어 철자를 그대로 음역하지 말고, 한국어 성경(개역개정/새번역/쉬운성경)에서 " +
+  "널리 쓰이는 표준 표기를 정확히 쓰세요 (예: '가나안'이 맞고 '캐나안'은 틀림, '떨기나무'가 맞고 " +
+  "'떤기나무'는 틀림) — 표기가 헷갈리면 지어내지 말고 가장 널리 알려진 표준 표기를 쓰세요. " +
   "여러 형제를 뭉뚱그려 가리킬 때(예: 요셉을 판 형제들 전체)는 나이 순서를 단정하지 말고 중립적인 " +
   "'형제들'을 쓰세요 — 이 경우 무조건 'brother'를 '형'으로 옮기지 마세요. 성경에 나이 순서가 명확한 " +
   "두 사람을 직접 비교할 때만(예: 형인 에서와 동생인 야곱, 형들보다 어리고 베냐민보다는 손위인 요셉처럼) " +
-  "'형'과 '동생'을 정확히 구분해서 쓰고, 그 관계가 확실하지 않으면 절대 추측하지 말고 중립적인 '형제'를 쓰세요.";
+  "'형'과 '동생'을 정확히 구분해서 쓰고, 그 관계가 확실하지 않으면 절대 추측하지 말고 중립적인 '형제'를 쓰세요. " +
+  "대화체 말투(존댓말/반말)는 두 인물의 위계에 맞게 쓰세요 — 하나님이 사람에게 말할 때, 부모가 자녀에게 " +
+  "말할 때, 왕이 신하에게 말할 때처럼 손윗사람·윗사람이 손아랫사람·아랫사람에게 말할 때는 존댓말이 아니라 " +
+  "반말이나 명령형(예: '가거라', '두려워하지 말라')을 쓰고, 반대로 아랫사람이 윗사람에게 말할 때만 " +
+  "존댓말을 쓰세요.";
 
 const bilingualField = (description: string) =>
   z.object({

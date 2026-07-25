@@ -157,6 +157,28 @@ export const profiles = pgTable("profiles", {
   // src/app/api/notifications/cron/route.ts. A date string in the profile's OWN timezone, same
   // convention as lastReadDate/forDate elsewhere (which are also now per-profile-timezone).
   lastNotifiedDate: date("last_notified_date"),
+
+  // --- Resume-where-you-left-off bookmarks (see src/lib/bookmark.ts) ---
+  // Reading tab's book/chapter browser: which book/chapter was last open, and the sentence-chunk
+  // index playback last reached there. Restored on mount (auto-navigates past the book grid) and
+  // used as the default startIndex the next time the speak button is pressed for that exact
+  // book/chapter/lang — never auto-plays audio itself (browser autoplay policy, and simply
+  // unwanted UX for something the user didn't ask to start).
+  readingBookmark: jsonb("reading_bookmark").$type<{
+    book: string;
+    chapter: number;
+    chunkIndex: number;
+    lang: "ko" | "en";
+  } | null>(),
+  // Today tab's three sections (context/passage/message) share one slot — whichever was last
+  // playing. `view` (verses/story) only applies when section is "passage".
+  todayBookmark: jsonb("today_bookmark").$type<{
+    section: "context" | "passage" | "message";
+    chunkIndex: number;
+    lang: "ko" | "en";
+    view?: "verses" | "story";
+  } | null>(),
+
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

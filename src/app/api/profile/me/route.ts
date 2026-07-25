@@ -31,5 +31,11 @@ export async function GET() {
     compFreeUntil: user?.compFreeUntil ?? null,
   };
 
-  return NextResponse.json({ status: "ready", name: profile.name, plan });
+  return NextResponse.json({
+    status: "ready",
+    name: profile.name,
+    plan,
+    readingBookmark: profile.readingBookmark,
+    todayBookmark: profile.todayBookmark,
+  });
 }

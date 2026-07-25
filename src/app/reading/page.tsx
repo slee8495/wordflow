@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { splitIntoChunks } from "@/lib/speak";
 import { BIBLE_BOOKS } from "@/lib/bibleBooks";
 import { KOREAN_BOOK_ABBREV, ENGLISH_BOOK_ABBREV } from "@/lib/passageRef";
@@ -18,6 +18,7 @@ import { ChevronIcon } from "../ChevronIcon";
 import { usePlayback } from "../PlaybackProvider";
 import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
+import { saveBookmark } from "@/lib/bookmark";
 
 const LANG_KEY = "wordflow:lang";
 const READING_SOURCE_ID = "reading-passage";
@@ -259,7 +260,7 @@ function BookGrid({
 }
 
 export default function ReadingPage() {
-  const { name, plan } = useUser();
+  const { name, plan, readingBookmark } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex: globalActiveChunkIndex, playText, pause, resume, stop } = usePlayback();
   const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
@@ -269,12 +270,25 @@ export default function ReadingPage() {
   const [passageText, setPassageText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UiStringKey | null>(null);
+  const [bookmarkRestored, setBookmarkRestored] = useState(false);
 
   const isSpeakingThisPassage = sourceId === READING_SOURCE_ID;
   const speakState = isSpeakingThisPassage ? globalSpeakState : null;
   const activeChunkIndex = isSpeakingThisPassage ? globalActiveChunkIndex : null;
 
   const passageChunks = useMemo(() => (passageText ? splitIntoChunks(passageText) : []), [passageText]);
+
+  // Saved chunk index only applies if it's for this exact book/chapter/language and still falls
+  // within the current text's chunk count (content can get regenerated after a quality fix, which
+  // would make an old index point at a different sentence or run past the end).
+  const resumeIndex =
+    readingBookmark &&
+    readingBookmark.book === selectedBook &&
+    readingBookmark.chapter === selectedChapter &&
+    readingBookmark.lang === contentLanguage &&
+    readingBookmark.chunkIndex < passageChunks.length
+      ? readingBookmark.chunkIndex
+      : undefined;
 
   function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
@@ -285,6 +299,45 @@ export default function ReadingPage() {
     const storedLang = localStorage.getItem(LANG_KEY);
     if (storedLang === "en" || storedLang === "ko") setContentLanguage(storedLang);
   }, []);
+
+  // Auto-navigate to the last book/chapter browsed, once, instead of always landing on the book
+  // grid. Guarded by bookmarkRestored (not just !selectedBook) so a user who deliberately backs out
+  // to the book grid via "← Books" doesn't get bounced right back to the bookmark.
+  useEffect(() => {
+    if (bookmarkRestored || !readingBookmark) return;
+    setSelectedBook(readingBookmark.book);
+    setSelectedChapter(readingBookmark.chapter);
+    setBookmarkRestored(true);
+  }, [readingBookmark, bookmarkRestored]);
+
+  // Mirrors activeChunkIndex without being a dependency of the autosave effect below — chunk index
+  // changes roughly every sentence, which would otherwise tear down and rebuild the 15s interval
+  // before it ever gets a chance to fire.
+  const activeChunkIndexRef = useRef<number | null>(null);
+  activeChunkIndexRef.current = activeChunkIndex;
+
+  // Best-effort autosave of playback position: immediately on pause/stop, and periodically while
+  // actively playing (covers someone who just closes the tab without pausing first). Page-scoped —
+  // stops running once this page unmounts, even if NowPlayingBar keeps the audio going elsewhere.
+  useEffect(() => {
+    if (!isSpeakingThisPassage || !selectedBook || !selectedChapter) return;
+    const save = () => {
+      if (activeChunkIndexRef.current === null) return;
+      saveBookmark("reading", {
+        book: selectedBook,
+        chapter: selectedChapter,
+        chunkIndex: activeChunkIndexRef.current,
+        lang: contentLanguage,
+      });
+    };
+    if (speakState === "paused" || speakState === null) {
+      save();
+      return;
+    }
+    if (speakState !== "playing") return;
+    const interval = setInterval(save, 15000);
+    return () => clearInterval(interval);
+  }, [isSpeakingThisPassage, speakState, selectedBook, selectedChapter, contentLanguage]);
 
   useEffect(() => {
     if (!selectedBook || !selectedChapter || !name || !plan?.hasAccess) return;
@@ -436,7 +489,7 @@ export default function ReadingPage() {
               {passageText &&
                 (!speakState ? (
                   <button
-                    onClick={() => speakPassage()}
+                    onClick={() => speakPassage(resumeIndex)}
                     className="text-base"
                     aria-label={selectedBook && selectedChapter ? listenToAria(uiLang, selectedBook, selectedChapter) : undefined}
                   >
