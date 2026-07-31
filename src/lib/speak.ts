@@ -157,6 +157,31 @@ export async function resumeSpeaking(): Promise<boolean> {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// A full passage fires every chunk's fetch at once (see speak() below) — a burst that's exactly
+// when a transient failure (cold start, a brief rate limit from the TTS backend, a flaky mobile
+// connection) is most likely to hit. Previously a single failed chunk was dropped for good, and
+// when that happened to a run of consecutive chunks near the end of a passage, playback would
+// finish early — sounding like the audio "cut off" partway through. Retrying a couple of times
+// before giving up on a chunk makes that far less likely.
+async function fetchWithRetry(text: string, attempts = 3): Promise<ArrayBuffer> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(400 * i);
+    try {
+      const res = await fetch(`/api/speak?text=${encodeURIComponent(text)}`);
+      if (!res.ok) throw new Error("tts request failed");
+      return await res.arrayBuffer();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 function fetchAudioBuffer(text: string): Promise<ArrayBuffer | null> {
   const cached = audioBufferCache.get(text);
   if (cached) return Promise.resolve(cached);
@@ -164,11 +189,7 @@ function fetchAudioBuffer(text: string): Promise<ArrayBuffer | null> {
   const pending = inFlight.get(text);
   if (pending) return pending;
 
-  const promise = fetch(`/api/speak?text=${encodeURIComponent(text)}`)
-    .then((res) => {
-      if (!res.ok) throw new Error("tts request failed");
-      return res.arrayBuffer();
-    })
+  const promise = fetchWithRetry(text)
     .then((buffer) => {
       audioBufferCache.set(text, buffer);
       return buffer;
