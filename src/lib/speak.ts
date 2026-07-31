@@ -288,15 +288,7 @@ export async function speak(
   await new Promise<void>((resolve) => {
     currentStopResolve = resolve;
 
-    let announced = false;
-    const onPlaying = () => {
-      if (announced) return;
-      announced = true;
-      opts.onPlaybackStart?.();
-      opts.onChunkStart?.(offsets[0].index);
-      updatePositionState(audio);
-    };
-    const onTimeUpdate = () => {
+    const reportPosition = () => {
       const t = audio.currentTime;
       let current = offsets[0].index;
       for (const o of offsets) {
@@ -306,11 +298,38 @@ export async function speak(
       opts.onChunkStart?.(current);
       updatePositionState(audio);
     };
+
+    // 'timeupdate' is the "correct" event for this, but browsers make no guarantee about how
+    // often it actually fires — it's been observed to stall for long stretches even while a tab
+    // stays in the foreground with audio audibly still playing, which showed up as the sentence
+    // highlight freezing mid-passage. Polling audio.currentTime every animation frame instead
+    // sidesteps that unreliability entirely; it's cheap (a couple of comparisons, 60x/sec) and
+    // only runs while something is actually loaded and playing.
+    let rafId: number | null = null;
+    const trackLoop = () => {
+      reportPosition();
+      rafId = requestAnimationFrame(trackLoop);
+    };
+    const stopTracking = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+    };
+
+    let announced = false;
+    const onPlaying = () => {
+      if (announced) return;
+      announced = true;
+      opts.onPlaybackStart?.();
+      opts.onChunkStart?.(offsets[0].index);
+      updatePositionState(audio);
+      stopTracking();
+      rafId = requestAnimationFrame(trackLoop);
+    };
     const onEnded = () => finish();
     const onError = () => finish();
     function finish() {
+      stopTracking();
       audio.removeEventListener("playing", onPlaying);
-      audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
       activeCleanup = null;
@@ -320,7 +339,6 @@ export async function speak(
     activeCleanup = finish;
 
     audio.addEventListener("playing", onPlaying);
-    audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded, { once: true });
     audio.addEventListener("error", onError, { once: true });
 
