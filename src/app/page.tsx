@@ -240,7 +240,7 @@ export default function Home() {
 
   function speakSection(id: string, label: string, text: string | null, startIndex?: number) {
     if (!text?.trim()) return;
-    playText(sectionSourceId(id), label, text, startIndex);
+    playText(sectionSourceId(id), label, text, startIndex, contentLanguage);
   }
 
   async function readNext() {

@@ -292,7 +292,7 @@ export default function ReadingPage() {
 
   function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
-    playText(READING_SOURCE_ID, `${selectedBook} ${selectedChapter}`, passageText, startIndex);
+    playText(READING_SOURCE_ID, `${selectedBook} ${selectedChapter}`, passageText, startIndex, contentLanguage);
   }
 
   useEffect(() => {

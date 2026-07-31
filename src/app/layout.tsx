@@ -51,9 +51,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      translate="no"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        {/* Opt out of Android Chrome's auto-translate — it was rewriting the DOM out from under
+            React (breaking the by-verse/story toggle) and overriding the app's language switch. */}
+        <meta name="google" content="notranslate" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var s=localStorage.getItem(${JSON.stringify(

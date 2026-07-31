@@ -13,7 +13,7 @@ type PlaybackContextValue = {
   label: string | null;
   speakState: SpeakState;
   activeChunkIndex: number | null;
-  playText: (sourceId: string, label: string, text: string, startIndex?: number) => void;
+  playText: (sourceId: string, label: string, text: string, startIndex?: number, lang?: "ko" | "en") => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -36,7 +36,7 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
   const speakStateRef = useRef<SpeakState>(null);
   speakStateRef.current = speakState;
 
-  const playText = useCallback((id: string, lbl: string, text: string, startIndex?: number) => {
+  const playText = useCallback((id: string, lbl: string, text: string, startIndex?: number, lang?: "ko" | "en") => {
     if (!text.trim()) return;
     const gen = ++genRef.current;
     setSourceId(id);
@@ -54,6 +54,7 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
         setActiveChunkIndex(index);
       },
       startIndex,
+      lang,
     }).then(() => {
       if (genRef.current !== gen) return; // superseded by a newer playText() or an explicit stop()
       setSpeakState(null);

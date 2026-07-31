@@ -74,11 +74,18 @@ function stripVerseMarkers(text: string): string {
   return text.replace(/\(\d+\)\s*/g, "");
 }
 
-function speakWithBrowserVoice(text: string, onStart?: () => void) {
+// Without an explicit lang, Android Chrome's speechSynthesis picks a voice by the device's
+// system-default TTS language rather than the text's actual language — so Korean content could
+// get read in an English voice (or vice versa) purely based on the phone's locale setting. iOS
+// Safari happens to be more forgiving here (it tends to sniff the text), which is why this only
+// ever showed up as an Android complaint. Setting utterance.lang pins it to what the app actually
+// selected instead of leaving it to the OS's default.
+function speakWithBrowserVoice(text: string, lang: "ko" | "en" | undefined, onStart?: () => void) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 0.95;
+  if (lang) utterance.lang = lang === "ko" ? "ko-KR" : "en-US";
   if (onStart) utterance.onstart = onStart;
   window.speechSynthesis.speak(utterance);
 }
@@ -201,7 +208,12 @@ function measureDuration(buffer: ArrayBuffer): Promise<number> {
 
 export async function speak(
   text: string,
-  opts: { onPlaybackStart?: () => void; onChunkStart?: (index: number) => void; startIndex?: number } = {},
+  opts: {
+    onPlaybackStart?: () => void;
+    onChunkStart?: (index: number) => void;
+    startIndex?: number;
+    lang?: "ko" | "en";
+  } = {},
 ) {
   if (!text.trim()) return;
   stopSpeaking(); // also bumps playToken, so capture `token` only after this
@@ -226,7 +238,7 @@ export async function speak(
   });
 
   if (ok.length === 0) {
-    speakWithBrowserVoice(requested.join(" "), () => {
+    speakWithBrowserVoice(requested.join(" "), opts.lang, () => {
       opts.onChunkStart?.(startIndex);
       opts.onPlaybackStart?.();
     });
