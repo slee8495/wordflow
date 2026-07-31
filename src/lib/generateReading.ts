@@ -602,6 +602,27 @@ export async function peekCurrentCurriculumItem(profile: Profile): Promise<Curri
     if (seasonItem) return seasonItem;
   }
 
+  // revealOrGenerate() (what actually runs when the profile opens the app) reveals this buffered
+  // item first if one's ready, rather than generating fresh from cursorPosition — and buildReading
+  // already advanced cursorPosition PAST it the moment it was buffered (see ensurePrefetchedNext).
+  // Skipping this check and reading cursorPosition directly was landing on the item *after* the
+  // one that's actually about to be revealed — the notification and the app disagreeing by
+  // exactly one curriculum step.
+  const [hidden] = await db
+    .select({ curriculumItemId: readings.curriculumItemId })
+    .from(readings)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, false)))
+    .orderBy(readings.createdAt)
+    .limit(1);
+  if (hidden) {
+    const [hiddenItem] = await db
+      .select()
+      .from(curriculumItems)
+      .where(eq(curriculumItems.id, hidden.curriculumItemId))
+      .limit(1);
+    if (hiddenItem) return hiddenItem;
+  }
+
   const [total] = await db
     .select({ count: sql<number>`count(*)` })
     .from(curriculumItems)
