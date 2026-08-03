@@ -268,15 +268,11 @@ export default function SettingsPage() {
               aria-checked={notificationsOn}
               onClick={toggleNotifications}
               disabled={notificationsBusy}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-                notificationsOn ? "bg-[var(--clay-deep)]" : "bg-[var(--clay-tint)]"
+              className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+                notificationsOn ? "justify-end bg-[var(--clay-deep)]" : "justify-start bg-[var(--clay-tint)]"
               }`}
             >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--paper-raised)] shadow transition-transform ${
-                  notificationsOn ? "translate-x-[22px]" : "translate-x-0.5"
-                }`}
-              />
+              <span className="h-5 w-5 rounded-full bg-[var(--paper-raised)] shadow" />
             </button>
           </div>
           {notificationsOn && (
