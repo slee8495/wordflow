@@ -37,9 +37,14 @@
   연락처는 slstudio8495@gmail.com (Stripe 계정과 동일 이메일) — 10번 항목 맨 마지막에
   support@slstudio.com 같은 실제 도메인 이메일로 최종 교체 예정.
 
-- [ ] **5. 계정/데이터 삭제 기능 추가**
+- [x] **5. 계정/데이터 삭제 기능 추가**
   현재 없음. Settings에 계정 삭제 액션 + 백엔드 라우트 추가
   (readings, bookmarks, push subscriptions 등 연관 데이터 함께 삭제).
+  **완료.** `POST /api/profile/delete-account` — Stripe 구독 있으면 먼저 취소 → profiles 삭제
+  (readings/push_subscriptions/deep_reading_logs 자동 cascade) → user 삭제 (accounts/sessions 자동 cascade).
+  `profiles.user_id`는 SET NULL이라 profiles/user 둘 다 명시적으로 삭제해야 함 — DB 제약조건 직접 확인함.
+  Settings에 확인창 있는 "계정 삭제" 링크 추가. 더미 데이터로 삭제 로직 실제 검증 완료
+  (실제 계정으로는 테스트 안 함 — 파괴적 작업이라).
 
 - [ ] **6. 관찰성: 에러 트래킹 + 업타임 모니터링**
   현재 둘 다 전혀 없음. 에러 트래킹(예: Sentry)과는 별개로, 사이트 자체가 죽었을 때 잡아주는
