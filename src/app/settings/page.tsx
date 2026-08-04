@@ -318,6 +318,15 @@ export default function SettingsPage() {
         </div>
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.fontSizeHint")}</p>
       </section>
+
+      <div className="flex justify-center gap-4 text-xs text-[var(--ink-soft)]">
+        <a href="/privacy" className="hover:underline">
+          Privacy Policy
+        </a>
+        <a href="/terms" className="hover:underline">
+          Terms of Service
+        </a>
+      </div>
     </div>
   );
 }
