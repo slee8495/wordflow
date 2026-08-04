@@ -39,6 +39,23 @@ export default function SettingsPage() {
   const [passphrase, setPassphrase] = useState("");
   const [passphraseBusy, setPassphraseBusy] = useState(false);
   const [passphraseError, setPassphraseError] = useState<UiStringKey | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<UiStringKey | null>(null);
+
+  async function deleteAccount() {
+    if (deleteBusy) return;
+    if (!window.confirm(t("settings.deleteAccountConfirm"))) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/profile/delete-account", { method: "POST" });
+      if (!res.ok) throw new Error("delete failed");
+      logout();
+    } catch {
+      setDeleteError("settings.deleteAccountFailed");
+      setDeleteBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!name) return;
@@ -152,6 +169,19 @@ export default function SettingsPage() {
           <AuthScreen />
         )}
         <p className="text-sm text-[var(--ink-soft)]">{t("settings.nameHint")}</p>
+        {name && (
+          <>
+            <button
+              type="button"
+              onClick={deleteAccount}
+              disabled={deleteBusy}
+              className="w-fit text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+            >
+              {t("settings.deleteAccount")}
+            </button>
+            {deleteError && <p className="text-sm text-red-600 dark:text-red-400">{t(deleteError)}</p>}
+          </>
+        )}
       </section>
 
       {name && (

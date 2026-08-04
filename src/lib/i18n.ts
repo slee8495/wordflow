@@ -94,6 +94,15 @@ const STRINGS = {
     ko: "지금은 이름이 로그인 역할을 해요 — 이 이름으로 읽기 진도가 저장돼요.",
     en: "Your name is your login for now — it's how your reading progress is saved.",
   },
+  "settings.deleteAccount": { ko: "계정 삭제", en: "Delete account" },
+  "settings.deleteAccountConfirm": {
+    ko: "정말 계정을 삭제할까요? 읽기 진도, 저장된 위치, 구독이 모두 영구히 삭제되고 되돌릴 수 없어요.",
+    en: "Delete your account? Your reading progress, saved bookmarks, and subscription will be permanently deleted — this can't be undone.",
+  },
+  "settings.deleteAccountFailed": {
+    ko: "계정 삭제에 실패했어요. 다시 시도해주세요.",
+    en: "Failed to delete your account. Please try again.",
+  },
   "settings.fontSize": { ko: "글자 크기", en: "Font Size" },
   "settings.fontSizeHint": { ko: "앱 전체에 바로 적용돼요.", en: "Applies across the whole app instantly." },
   "settings.uiLanguage": { ko: "앱 언어", en: "App Language" },
