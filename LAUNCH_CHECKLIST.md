@@ -20,10 +20,15 @@
   Product "Wordflow Subscription" $3.99/월 생성, 웹훅 "Wordflow production" 등록,
   결제 성공/환불 영수증 이메일도 켜둠. 키 3개 모두 `.env.local` + Vercel 프로덕션에 연결하고 재배포 완료.
 
-- [ ] **3. Stripe 결제 플로우 전체 테스트**
+- [x] **3. Stripe 결제 플로우 전체 테스트**
   테스트 모드로: 신규 가입 → 체크아웃(테스트 카드) → 7일 무료체험 시작 확인 →
   웹훅이 DB의 구독 상태를 정확히 갱신하는지 확인 → 결제 전/후 Today·Reading 탭 접근 제한이 맞는지 확인 →
   빌링 포털(해지/관리) 동작 확인 → 가족 패스프레이즈·관리자 무료 지급 기능이 실제 구독과 같이 잘 동작하는지 확인.
+  **완료.** `slee6`(sanlee8495) 계정의 `comp_free_forever`를 잠깐 꺼서 실제 체크아웃 테스트 →
+  테스트 카드 4242로 체크아웃 → "Trial ends Aug 11" 확인 → DB에 stripe_customer_id/subscription_id/
+  subscription_status="trialing"/current_period_end 정확히 반영됨 → Today/Reading 탭 접근 풀림 확인 →
+  Manage billing 포털에서 구독 상세/결제수단/인보이스 확인 → 구독 취소까지 테스트.
+  Stripe 웹훅 딜리버리 로그: **Total 3, Failed 0**. 테스트 후 `comp_free_forever`는 다시 true로 복원 완료.
 
 - [ ] **4. 개인정보처리방침 + 이용약관 페이지 추가**
   현재 앱에 전혀 없음. 유료 구독 + Google 로그인 + Stripe 결제를 다루는 서비스에는 필수.
