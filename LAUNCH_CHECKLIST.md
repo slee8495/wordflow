@@ -8,12 +8,17 @@
   (Stripe를 live mode로 전환하기 전에 승인 필요 — 13번 항목의 선행조건)
   **제출 완료. 회신 대기 중.**
 
-- [ ] **2. Stripe 계정 생성 + 테스트 키 연동**
+- [x] **2. Stripe 계정 생성 + 테스트 키 연동**
   실제 Stripe 계정 생성 → $3.99/월 정기결제 Price 생성 (7일 무료체험 포함) →
   Secret Key / Price ID 발급, 웹훅 엔드포인트(`/api/billing/webhook`) 등록 후 Webhook Secret 발급 →
   `.env.local`과 Vercel 프로덕션에 `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` 추가.
   (결제 관련 코드는 이미 다 구현되어 있음 — 키만 연결하면 됨)
   Stripe 대시보드에서 결제/체크아웃 영수증 이메일도 같이 켜둘 것 — 별도 이메일 인프라 없이 영수증 문제 해결됨.
+  **완료.** Google 계정 `slstudio8495@gmail.com`으로 새 Stripe 계정 생성 (Business name: "SL Studio" —
+  앞으로 여러 앱을 이 계정 하나로 운영할 예정이라 앱 이름이 아니라 상위 사업체 이름으로 설정).
+  Global sales는 "Pick what you need"로 선택 (Managed Payments의 3.5% 추가 수수료 회피, 나중에 변경 가능).
+  Product "Wordflow Subscription" $3.99/월 생성, 웹훅 "Wordflow production" 등록,
+  결제 성공/환불 영수증 이메일도 켜둠. 키 3개 모두 `.env.local` + Vercel 프로덕션에 연결하고 재배포 완료.
 
 - [ ] **3. Stripe 결제 플로우 전체 테스트**
   테스트 모드로: 신규 가입 → 체크아웃(테스트 카드) → 7일 무료체험 시작 확인 →
