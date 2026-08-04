@@ -34,7 +34,8 @@
   현재 앱에 전혀 없음. 유료 구독 + Google 로그인 + Stripe 결제를 다루는 서비스에는 필수.
   수집하는 정보(이메일, 읽기 진도, 시간대), 사용 목적, 결제 처리(Stripe), 사용하는 AI(Claude/TTS), 연락처 포함.
   **완료.** `/privacy`, `/terms` 공개 페이지 추가 (로그인 없이도 접근 가능, Settings 하단에 링크).
-  연락처는 일단 sanlee8495@gmail.com — 10번 항목에서 전용 지원 이메일로 나중에 교체 예정.
+  연락처는 slstudio8495@gmail.com (Stripe 계정과 동일 이메일) — 10번 항목 맨 마지막에
+  support@slstudio.com 같은 실제 도메인 이메일로 최종 교체 예정.
 
 - [ ] **5. 계정/데이터 삭제 기능 추가**
   현재 없음. Settings에 계정 삭제 액션 + 백엔드 라우트 추가
@@ -66,9 +67,10 @@
   문제 생겼을 때 실제 복구 절차가 뭔지 문서화.
 
 - [ ] **10. 커스텀 도메인 구입 + 실제 지원 이메일 마련**
-  현재 `wordflow-jade.vercel.app`뿐 (연결된 도메인 0개), 연락처도 개인 Gmail뿐.
-  정식 도메인 구입 후 Vercel에 연결, 개인정보처리방침/Stripe 영수증/사용자 문의용
-  실제 지원 이메일(예: support@도메인) 별도 마련.
+  현재 `wordflow-jade.vercel.app`뿐 (연결된 도메인 0개), 연락처도 `slstudio8495@gmail.com` (Stripe 계정 이메일)뿐.
+  정식 도메인 구입 후 Vercel에 연결, Stripe 대시보드/개인정보처리방침/이용약관에 실제 지원 이메일 연결.
+  **맨 마지막 단계**: `/privacy`·`/terms`의 연락처 이메일을 `slstudio8495@gmail.com`에서
+  `support@slstudio.com` 같은 실제 도메인 이메일로 최종 교체.
 
 - [ ] **11. 공개 랜딩 페이지 제작 (로그인 화면 말고)**
   확인해보니 지금 `/`는 로그인 안 한 사람한테 바로 AuthScreen/PaywallScreen을 보여줌 —

@@ -5,7 +5,7 @@ export const metadata: Metadata = {
 };
 
 const LAST_UPDATED = "August 4, 2026";
-const CONTACT_EMAIL = "sanlee8495@gmail.com";
+const CONTACT_EMAIL = "slstudio8495@gmail.com";
 
 export default function PrivacyPage() {
   return (
