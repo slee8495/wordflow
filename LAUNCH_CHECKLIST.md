@@ -56,12 +56,17 @@
   소스맵 업로드는 안 됨(스택 트레이스가 난독화된 채로 보임) — 나중에 추가 가능.
   UptimeRobot: `wordflow-jade.vercel.app` 5분 간격 모니터 생성, 다운 시 이메일 알림 설정.
 
-- [ ] **7. 어뷰징 방지 / rate limiting 추가**
+- [x] **7. 어뷰징 방지 / rate limiting 추가**
   현재 코드 전체에 rate limiting이 전혀 없음. 실제 비용으로 이어지는 두 가지 위험:
   (1) AI 콘텐츠 생성·TTS 엔드포인트(`/api/speak`, `generateReading` 등)에 사용자/IP별 제한이 없어서,
   스크립트로 대량 요청하면 실제 Claude/TTS API 비용이 나감.
   (2) `/api/billing/redeem-passphrase`에 시도 횟수 제한이 없어서, 로그인만 하면 무제한으로 패스프레이즈를
   스크립트로 시도해볼 수 있음. 최소한 이 두 엔드포인트에는 rate limiting 필요 (Upstash/KV 기반 등).
+  **완료.** Upstash 대신 이미 쓰고 있는 Postgres(Neon)에 `rate_limits` 테이블 하나로 간단한
+  fixed-window rate limiter 구현 (`src/lib/rateLimit.ts`) — 이 정도 트래픽 규모엔 Redis까지 필요 없음.
+  `/api/speak`: 캐시 미스(실제 TTS 생성)일 때만 IP당 분당 40회로 제한 (캐시 히트는 무료라 제한 안 함).
+  `/api/billing/redeem-passphrase`: 프로필당 시간당 5회로 제한. 윈도우 리셋/카운트 로직 DB에 직접
+  테스트해서 검증 완료.
 
 - [ ] **8. 핵심 플로우 최소 자동화 테스트 추가**
   현재 테스트 코드 전무 (jest/vitest/playwright 등 전혀 없음). 이번 세션에 고친 버그들
