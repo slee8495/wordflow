@@ -38,6 +38,36 @@ const STRINGS = {
     en: "Something went wrong. Please try again.",
   },
 
+  "landing.tagline": {
+    ko: "매일 5–10분, 이야기처럼 읽는 성경",
+    en: "5–10 minutes a day, the Bible told like a story",
+  },
+  "landing.subtitle": {
+    ko: "매일 한 챕터씩, 배경 설명과 오늘의 메시지, 그리고 듣기 좋은 오디오까지 함께.",
+    en: "One chapter a day, with context, a daily reflection, and audio narration to listen along.",
+  },
+  "landing.cta": { ko: "Google로 시작하기 — 7일 무료체험", en: "Get started with Google — 7-day free trial" },
+  "landing.feature.cycle.title": { ko: "끊김 없이 성경 전체를 완주", en: "A gap-free path through the whole Bible" },
+  "landing.feature.cycle.body": {
+    ko: "창세기부터 요한계시록까지, 매일 이어서 한 챕터씩 — 놓친 날 없이 순서대로 진행돼요.",
+    en: "Genesis to Revelation, one chapter at a time, picking back up exactly where you left off.",
+  },
+  "landing.feature.context.title": { ko: "배경 설명 + 오늘의 메시지", en: "Context & a daily reflection" },
+  "landing.feature.context.body": {
+    ko: "그날 본문의 역사적 배경과, 삶에 적용할 수 있는 오늘의 메시지를 AI가 함께 준비해드려요.",
+    en: "Each day's passage comes with historical background and a short reflection connecting it to daily life.",
+  },
+  "landing.feature.audio.title": { ko: "듣기 좋은 오디오, 이어듣기까지", en: "Listen along, and pick up where you stopped" },
+  "landing.feature.audio.body": {
+    ko: "본문을 읽어주는 오디오를 백그라운드에서도 재생하고, 다음에 열면 멈췄던 문장부터 다시 시작해요.",
+    en: "Audio narration keeps playing in the background, and resumes from the exact sentence you left off on.",
+  },
+  "landing.pricing.title": { ko: "$3.99/월, 7일 무료체험", en: "$3.99/month, 7-day free trial" },
+  "landing.pricing.body": {
+    ko: "매일의 콘텐츠와 오디오를 만드는 데 드는 실제 AI·API 비용을 반영한 가격이에요. 체험 기간 중 언제든 취소할 수 있어요.",
+    en: "The price reflects the real AI and API costs behind generating each day's content and audio. Cancel anytime during the trial.",
+  },
+
   "today.preparing": {
     ko: "오늘의 말씀을 준비하고 있어요. 조금만 기다려 주세요…",
     en: "Preparing today's reading. This may take a moment…",

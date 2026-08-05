@@ -8,6 +8,7 @@ import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRe
 import { greeting, passageOfLabel, type UiStringKey } from "@/lib/i18n";
 import { ChevronButton, ChevronIcon } from "./ChevronIcon";
 import { AuthScreen } from "./AuthScreen";
+import { LandingScreen } from "./LandingScreen";
 import { PaywallScreen } from "./PaywallScreen";
 import { usePlayback } from "./PlaybackProvider";
 import { useTimezone } from "./TimezoneProvider";
@@ -131,7 +132,7 @@ function Section({
 }
 
 export default function Home() {
-  const { name, plan, todayBookmark } = useUser();
+  const { name, plan, todayBookmark, status } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { timezone } = useTimezone();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex, playText, pause, resume, stop } = usePlayback();
@@ -277,6 +278,9 @@ export default function Home() {
     year: "numeric",
   }).format(new Date(Date.UTC(dayY, dayM - 1, dayD)));
 
+  if (status === "signedOut") {
+    return <LandingScreen />;
+  }
   if (name === null) {
     return <AuthScreen />;
   }
