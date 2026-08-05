@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 // One-time redemption of the shared family passphrase, granting permanent free access
 // (users.compFreeForever) independent of Stripe. Not a real security boundary (it's a shared
@@ -10,6 +11,14 @@ import { authErrorResponse, requireProfile } from "@/lib/authProfile";
 export async function POST(req: NextRequest) {
   try {
     const profile = await requireProfile();
+
+    // A legitimate attempt takes 1-2 tries; this only exists to stop someone signed in from
+    // scripting guesses against the shared passphrase.
+    const allowed = await checkRateLimit(`passphrase:${profile.id}`, 5, 60 * 60);
+    if (!allowed) {
+      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    }
+
     const body = await req.json().catch(() => null);
     const passphrase = typeof body?.passphrase === "string" ? body.passphrase : "";
 

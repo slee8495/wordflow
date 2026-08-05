@@ -285,6 +285,15 @@ export const bibleTextCache = pgTable(
   (t) => [unique().on(t.translation, t.book, t.chapter)],
 );
 
+// Fixed-window rate limiting (see src/lib/rateLimit.ts) — a small app doesn't need Redis/Upstash
+// for this, a single upserted row per key does the job. `key` is caller-defined, e.g.
+// "speak:203.0.113.4" or "passphrase:42" (profile id).
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;

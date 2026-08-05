@@ -3,6 +3,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { gateway, generateSpeech } from "ai";
 import { list, put } from "@vercel/blob";
 import { SPEECH_MODEL_ID } from "@/lib/ai/model";
+import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 
@@ -35,6 +36,14 @@ export async function GET(req: NextRequest) {
     }
   } catch {
     // Blob lookup failing shouldn't block playback — fall through to a fresh TTS generation.
+  }
+
+  // Only the generation path costs real money — a cache hit above already returned. Allows a
+  // generous burst (a long chapter can fire 20-30 chunk requests in parallel on first listen)
+  // while still capping a scripted flood of arbitrary text through this unauthenticated endpoint.
+  const allowed = await checkRateLimit(`speak:${clientIp(req)}`, 40, 60);
+  if (!allowed) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429 });
   }
 
   try {
