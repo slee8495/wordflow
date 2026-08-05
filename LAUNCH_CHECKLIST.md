@@ -99,6 +99,10 @@
   정식 도메인 구입 후 Vercel에 연결, Stripe 대시보드/개인정보처리방침/이용약관에 실제 지원 이메일 연결.
   **맨 마지막 단계**: `/privacy`·`/terms`의 연락처 이메일을 `slstudio8495@gmail.com`에서
   `support@slstudio.com` 같은 실제 도메인 이메일로 최종 교체.
+  **완료.** 도메인은 `sl-studio.com`이 이미 타인 소유라 `sl-studio.dev`로 구매 (사용자가 별도
+  `slstudio_website` 레포/세션에서 진행). `wordflow.sl-studio.dev`를 Vercel에서 Wordflow 프로젝트에
+  연결 (`vercel domains add` — DNS 자동 설정됨, 200 확인). `/privacy`·`/terms` 연락처를
+  `support@sl-studio.dev`로 교체하고 배포 완료.
 
 - [ ] **11. 공개 랜딩 페이지 제작 (로그인 화면 말고)**
   확인해보니 지금 `/`는 로그인 안 한 사람한테 바로 AuthScreen/PaywallScreen을 보여줌 —
