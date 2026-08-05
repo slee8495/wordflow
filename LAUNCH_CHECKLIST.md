@@ -68,12 +68,17 @@
   `/api/billing/redeem-passphrase`: 프로필당 시간당 5회로 제한. 윈도우 리셋/카운트 로직 DB에 직접
   테스트해서 검증 완료.
 
-- [ ] **8. 핵심 플로우 최소 자동화 테스트 추가**
+- [x] **8. 핵심 플로우 최소 자동화 테스트 추가**
   현재 테스트 코드 전무 (jest/vitest/playwright 등 전혀 없음). 이번 세션에 고친 버그들
   (알림 진도 불일치, 하이라이트 멈춤, TTS 문장 누락, 토글 정렬 등) 전부 테스트가 아니라 수동으로 찾은 것.
   결제 붙기 전에 최소한 위험도 높은 부분만이라도: 인증/구독 권한 체크(`requireProfile`/`requireEntitledProfile`),
   Stripe 웹훅 핸들러의 DB 반영, 커리큘럼 커서 전진 로직(`buildReading`/`peekCurrentCurriculumItem` —
   최근 알림 버그 났던 바로 그 부분)에는 테스트를 붙일 것.
+  **완료.** Vitest 설치, `npm test`로 실행. `hasActiveAccess` 순수 함수 테스트, `requireProfile`/
+  `requireEntitledProfile`/`authErrorResponse`(auth·db 모킹), Stripe 웹훅 핸들러의 3개 이벤트 타입별
+  DB 반영 + 잘못된 서명 거부(stripe·db 모킹), 그리고 `peekCurrentCurriculumItem`은 별도 테스트 DB가
+  없어서 실제 dev DB에 자체 정리되는 더미 데이터로 통합 테스트 — 최근 알림 버그(hidden buffer vs
+  cursorPosition)의 정확한 회귀 테스트로 작성함. 20개 테스트 전부 통과, 정리도 확인됨.
 
 - [ ] **9. 백업/장애 대응 계획 확인**
   프로덕션 Postgres(Neon)의 백업/PITR(point-in-time recovery) 설정 확인 — 계정, 읽기 진도, 구독 정보가
