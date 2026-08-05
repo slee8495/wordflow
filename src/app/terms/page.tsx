@@ -4,8 +4,8 @@ export const metadata: Metadata = {
   title: "Terms of Service — Wordflow",
 };
 
-const LAST_UPDATED = "August 4, 2026";
-const CONTACT_EMAIL = "slstudio8495@gmail.com";
+const LAST_UPDATED = "August 5, 2026";
+const CONTACT_EMAIL = "support@sl-studio.dev";
 
 export default function TermsPage() {
   return (
