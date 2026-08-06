@@ -94,7 +94,7 @@
   - **실제 장애 시 복구 절차**: DB 문제 — Neon 콘솔에서 PITR로 시점 복구 (6시간 이내 발견 시에만 가능,
     현재 최대 리스크 지점). Blob 문제 — 그냥 재생성 스크립트 다시 돌리면 됨(`db:regenerate-content` 등).
 
-- [ ] **10. 커스텀 도메인 구입 + 실제 지원 이메일 마련**
+- [x] **10. 커스텀 도메인 구입 + 실제 지원 이메일 마련**
   현재 `wordflow-jade.vercel.app`뿐 (연결된 도메인 0개), 연락처도 `slstudio8495@gmail.com` (Stripe 계정 이메일)뿐.
   정식 도메인 구입 후 Vercel에 연결, Stripe 대시보드/개인정보처리방침/이용약관에 실제 지원 이메일 연결.
   **맨 마지막 단계**: `/privacy`·`/terms`의 연락처 이메일을 `slstudio8495@gmail.com`에서
