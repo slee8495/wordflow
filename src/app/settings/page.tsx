@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_NOTIFICATION_HOUR } from "@/lib/date";
 import { FONT_SCALES } from "@/lib/fontScale";
-import { fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
+import { familyMemberOfLabel, familySlotsLabel, fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
 import { disableNotifications, enableNotifications, pushSupported, updateNotificationHour } from "@/lib/pushNotifications";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
 import { AuthScreen } from "../AuthScreen";
@@ -41,6 +41,14 @@ export default function SettingsPage() {
   const [passphraseError, setPassphraseError] = useState<UiStringKey | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<UiStringKey | null>(null);
+  const [familyInfo, setFamilyInfo] = useState<{
+    inviteUrl: string;
+    members: { id: string; name: string | null; joinedAt: string }[];
+    slotsUsed: number;
+    slotsTotal: number;
+  } | null>(null);
+  const [familyBusy, setFamilyBusy] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   async function deleteAccount() {
     if (deleteBusy) return;
@@ -67,6 +75,23 @@ export default function SettingsPage() {
       })
       .catch(() => {});
   }, [name]);
+
+  const isFamilyMember = Boolean(plan?.viaFamilyOwnerId);
+  const isFamilyOwner = plan?.planType === "family" && plan?.hasAccess && !isFamilyMember;
+  const isIndividualSubscriber = plan?.hasAccess && plan?.planType === "individual" && !isFamilyMember;
+
+  useEffect(() => {
+    if (!isFamilyOwner) {
+      setFamilyInfo(null);
+      return;
+    }
+    fetch("/api/family/invite")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.inviteUrl) setFamilyInfo(data);
+      })
+      .catch(() => {});
+  }, [isFamilyOwner]);
 
   async function toggleNotifications() {
     if (!name || notificationsBusy) return;
@@ -100,11 +125,15 @@ export default function SettingsPage() {
     if (name && notificationsOn) await updateNotificationHour(hour);
   }
 
-  async function startCheckout() {
+  async function startCheckout(checkoutPlan: "individual" | "family") {
     if (planBusy) return;
     setPlanBusy(true);
     try {
-      const res = await fetch("/api/billing/checkout", { method: "POST" });
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: checkoutPlan }),
+      });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
       else setPlanBusy(false);
@@ -123,6 +152,72 @@ export default function SettingsPage() {
       else setPlanBusy(false);
     } catch {
       setPlanBusy(false);
+    }
+  }
+
+  async function convertToFamily() {
+    if (planBusy) return;
+    setPlanBusy(true);
+    try {
+      const res = await fetch("/api/billing/change-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: "family" }),
+      });
+      if (res.ok) await refreshPlan();
+    } finally {
+      setPlanBusy(false);
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!familyInfo) return;
+    await navigator.clipboard.writeText(familyInfo.inviteUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }
+
+  async function regenerateInviteLink() {
+    if (familyBusy) return;
+    setFamilyBusy(true);
+    try {
+      const res = await fetch("/api/family/invite/regenerate", { method: "POST" });
+      if (res.ok) {
+        const refreshed = await fetch("/api/family/invite");
+        if (refreshed.ok) setFamilyInfo(await refreshed.json());
+      }
+    } finally {
+      setFamilyBusy(false);
+    }
+  }
+
+  async function removeFamilyMember(memberUserId: string) {
+    if (familyBusy) return;
+    setFamilyBusy(true);
+    try {
+      const res = await fetch("/api/family/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberUserId }),
+      });
+      if (res.ok) {
+        const refreshed = await fetch("/api/family/invite");
+        if (refreshed.ok) setFamilyInfo(await refreshed.json());
+      }
+    } finally {
+      setFamilyBusy(false);
+    }
+  }
+
+  async function leaveFamilyPlan() {
+    if (familyBusy) return;
+    setFamilyBusy(true);
+    try {
+      // No memberUserId in the body — the route defaults to removing the caller's own membership.
+      await fetch("/api/family/remove", { method: "POST" });
+    } finally {
+      setFamilyBusy(false);
+      await refreshPlan();
     }
   }
 
@@ -189,41 +284,139 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("plan.title")}</h2>
           {plan?.compFreeForever ? (
             <p className="text-sm text-[var(--ink)]">{t("plan.freeFamily")}</p>
-          ) : plan?.hasAccess ? (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-[var(--ink)]">
-                {plan.subscriptionStatus === "trialing"
-                  ? plan.currentPeriodEnd
-                    ? `${t("plan.trialEndsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
-                    : t("plan.trialActive")
-                  : plan.currentPeriodEnd
-                    ? `${t("plan.renewsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
-                    : t("plan.active")}
-              </p>
+          ) : isFamilyMember ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-[var(--ink)]">{familyMemberOfLabel(uiLang, plan?.familyOwnerName ?? null)}</p>
+              {!plan?.hasAccess && <p className="text-sm text-[var(--ink-soft)]">{t("family.inactiveOwnerHint")}</p>}
               <button
                 type="button"
-                onClick={openBillingPortal}
-                disabled={planBusy}
-                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+                onClick={leaveFamilyPlan}
+                disabled={familyBusy}
+                className="w-fit rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
               >
-                {t("plan.manageBilling")}
+                {t("family.leaveButton")}
               </button>
+            </div>
+          ) : isFamilyOwner ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-[var(--ink)]">{t("family.ownerTitle")}</p>
+                <button
+                  type="button"
+                  onClick={openBillingPortal}
+                  disabled={planBusy}
+                  className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+                >
+                  {t("plan.manageBilling")}
+                </button>
+              </div>
+              {familyInfo && (
+                <>
+                  <p className="text-xs text-[var(--ink-soft)]">
+                    {familySlotsLabel(uiLang, familyInfo.slotsUsed, familyInfo.slotsTotal)}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={familyInfo.inviteUrl}
+                      className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyInviteLink}
+                      className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)]"
+                    >
+                      {linkCopied ? t("family.linkCopied") : t("family.copyLink")}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={regenerateInviteLink}
+                    disabled={familyBusy}
+                    className="w-fit text-xs text-[var(--ink-soft)] hover:underline disabled:opacity-50"
+                  >
+                    {t("family.regenerateLink")}
+                  </button>
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-xs font-medium text-[var(--ink-soft)]">{t("family.membersHeading")}</p>
+                    {familyInfo.members.length === 0 ? (
+                      <p className="text-sm text-[var(--ink-soft)]">{t("family.noMembersYet")}</p>
+                    ) : (
+                      familyInfo.members.map((member) => (
+                        <div key={member.id} className="flex items-center justify-between">
+                          <span className="text-sm text-[var(--ink)]">{member.name ?? member.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFamilyMember(member.id)}
+                            disabled={familyBusy}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                          >
+                            {t("family.removeMember")}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : plan?.hasAccess ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-[var(--ink)]">
+                  {plan.subscriptionStatus === "trialing"
+                    ? plan.currentPeriodEnd
+                      ? `${t("plan.trialEndsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
+                      : t("plan.trialActive")
+                    : plan.currentPeriodEnd
+                      ? `${t("plan.renewsOn")} ${formatPlanDate(plan.currentPeriodEnd, uiLang)}`
+                      : t("plan.active")}
+                </p>
+                <button
+                  type="button"
+                  onClick={openBillingPortal}
+                  disabled={planBusy}
+                  className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+                >
+                  {t("plan.manageBilling")}
+                </button>
+              </div>
+              {isIndividualSubscriber && (
+                <button
+                  type="button"
+                  onClick={convertToFamily}
+                  disabled={planBusy}
+                  className="w-fit text-xs text-[var(--ink-soft)] hover:underline disabled:opacity-50"
+                >
+                  {t("plan.convertToFamily")}
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               <p className="text-sm text-[var(--ink-soft)]">{t("plan.expiredHint")}</p>
-              <button
-                type="button"
-                onClick={startCheckout}
-                disabled={planBusy}
-                className="w-fit rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)] disabled:opacity-50"
-              >
-                {t("plan.subscribeCta")}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => startCheckout("individual")}
+                  disabled={planBusy}
+                  className="w-fit rounded-lg bg-[var(--clay-deep)] px-3 py-2 text-sm font-medium text-[var(--paper-raised)] disabled:opacity-50"
+                >
+                  {t("plan.subscribeCta")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startCheckout("family")}
+                  disabled={planBusy}
+                  className="w-fit rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)] disabled:opacity-50"
+                >
+                  {t("plan.subscribeFamilyCta")}
+                </button>
+              </div>
             </div>
           )}
 
-          {!plan?.compFreeForever && (
+          {!plan?.compFreeForever && !isFamilyMember && (
             <form onSubmit={submitPassphrase} className="flex items-center gap-2">
               <input
                 value={passphrase}

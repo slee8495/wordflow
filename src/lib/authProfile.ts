@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { profiles, users, type Profile } from "@/db/schema";
-import { hasActiveAccess } from "@/lib/entitlement";
+import { resolveEntitlement } from "@/lib/family";
 
 export class UnauthenticatedError extends Error {}
 export class ProfileNotLinkedError extends Error {}
@@ -24,15 +24,15 @@ export async function requireProfile(): Promise<Profile> {
   return profile;
 }
 
-// Same as requireProfile(), but also requires an active subscription or comp grant (see
-// src/lib/entitlement.ts) — used by every route that serves or generates paid content (Today's
-// daily reading, Reading's book/chapter browser). Routes a signed-in-but-not-yet-paying user
-// still needs to reach (billing checkout, profile settings, etc.) should keep using
-// requireProfile() instead.
+// Same as requireProfile(), but also requires an active subscription/comp grant of the caller's
+// own, OR active access inherited from a family-plan owner (see src/lib/family.ts) — used by
+// every route that serves or generates paid content (Today's daily reading, Reading's book/
+// chapter browser). Routes a signed-in-but-not-yet-paying user still needs to reach (billing
+// checkout, profile settings, etc.) should keep using requireProfile() instead.
 export async function requireEntitledProfile(): Promise<Profile> {
   const profile = await requireProfile();
   const [user] = await db.select().from(users).where(eq(users.id, profile.userId!)).limit(1);
-  if (!user || !hasActiveAccess(user)) throw new PaymentRequiredError("no active subscription");
+  if (!user || !(await resolveEntitlement(user)).hasAccess) throw new PaymentRequiredError("no active subscription");
   return profile;
 }
 

@@ -45,6 +45,17 @@ export const users = pgTable("user", {
   compFreeForever: boolean("comp_free_forever").default(false).notNull(),
   // Time-limited free access an admin can grant from /admin (e.g. a 1-year comp).
   compFreeUntil: date("comp_free_until"),
+
+  // --- Family plan (see src/lib/family.ts) ---
+  // "individual" | "family" | null — always derived fresh from the live Stripe subscription's
+  // price id by the webhook handler, never trusted from Checkout-time intent. Gates whether this
+  // user's family members inherit access from them (see resolveEntitlementDecision) — an owner
+  // who downgrades to individual must stop covering former family members even though their own
+  // subscriptionStatus is still "active".
+  planType: varchar("plan_type", { length: 16 }),
+  // Lazily generated on first invite-link request, regenerable by the owner to invalidate a
+  // leaked link. Not tied to plan type — harmless to exist on a non-family-plan user, just unused.
+  familyInviteToken: text("family_invite_token").unique(),
 });
 
 export const accounts = pgTable(
@@ -294,8 +305,27 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull(),
 });
 
+// One row per family-plan member (never one for the owner themselves — the owner is identified
+// by having an active subscription with planType "family", not by a row here). memberUserId is
+// UNIQUE so a person can only belong to one family at a time. The up-to-4-members cap is enforced
+// at insert time under a Postgres advisory lock (see withFamilyLock in src/lib/family.ts) — a
+// COUNT can't be expressed as a table constraint. Deleting a row (removal or self-leave) frees
+// that slot immediately for someone else to be invited into.
+export const familyMemberships = pgTable("family_memberships", {
+  id: serial("id").primaryKey(),
+  ownerUserId: text("owner_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  memberUserId: text("member_user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
 export type Reading = typeof readings.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type FamilyMembership = typeof familyMemberships.$inferSelect;

@@ -15,6 +15,15 @@ export type PlanInfo = {
   currentPeriodEnd: string | null;
   compFreeForever: boolean;
   compFreeUntil: string | null;
+  // "individual" | "family" | null — the caller's OWN subscription tier (null if they're covered
+  // via someone else's family plan instead, or have no subscription at all).
+  planType: string | null;
+  // Set when hasAccess is true because of someone else's family plan, not the caller's own
+  // subscription/comp grant — that owner's users.id.
+  viaFamilyOwnerId: string | null;
+  // Display name for viaFamilyOwnerId, when set — lets Settings show "OO님의 가족 플랜에 속해
+  // 있어요" without a separate lookup.
+  familyOwnerName: string | null;
 };
 
 export type ReadingBookmark = { book: string; chapter: number; chunkIndex: number; lang: "ko" | "en" };

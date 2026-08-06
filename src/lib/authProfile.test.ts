@@ -52,11 +52,14 @@ describe("requireEntitledProfile", () => {
     selectMock.mockReset();
   });
 
-  it("throws PaymentRequiredError when the linked user has no active access", async () => {
+  it("throws PaymentRequiredError when the linked user has no active access and no family membership", async () => {
     const profile = { id: 42, userId: "user-1", name: "test" };
     const user = { id: "user-1", compFreeForever: false, compFreeUntil: null, subscriptionStatus: "canceled" };
     authMock.mockResolvedValue({ user: { id: "user-1" } });
-    selectMock.mockReturnValueOnce(queryReturning([profile])).mockReturnValueOnce(queryReturning([user]));
+    selectMock
+      .mockReturnValueOnce(queryReturning([profile]))
+      .mockReturnValueOnce(queryReturning([user]))
+      .mockReturnValueOnce(queryReturning([])); // resolveEntitlement's family-membership lookup
     await expect(requireEntitledProfile()).rejects.toBeInstanceOf(PaymentRequiredError);
   });
 
@@ -64,7 +67,10 @@ describe("requireEntitledProfile", () => {
     const profile = { id: 42, userId: "user-1", name: "test" };
     const user = { id: "user-1", compFreeForever: false, compFreeUntil: null, subscriptionStatus: "trialing" };
     authMock.mockResolvedValue({ user: { id: "user-1" } });
-    selectMock.mockReturnValueOnce(queryReturning([profile])).mockReturnValueOnce(queryReturning([user]));
+    selectMock
+      .mockReturnValueOnce(queryReturning([profile]))
+      .mockReturnValueOnce(queryReturning([user]))
+      .mockReturnValueOnce(queryReturning([])); // resolveEntitlement's family-membership lookup
     await expect(requireEntitledProfile()).resolves.toEqual(profile);
   });
 });

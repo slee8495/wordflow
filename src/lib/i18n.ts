@@ -100,10 +100,15 @@ const STRINGS = {
   "plan.renewsOn": { ko: "다음 결제일:", en: "Renews" },
   "plan.manageBilling": { ko: "결제 관리", en: "Manage billing" },
   "plan.expiredHint": {
-    ko: "7일 무료 체험 후 월 $3.99가 결제돼요. 체험 종료 전 언제든 취소할 수 있어요.",
-    en: "7-day free trial, then $3.99/month. Cancel anytime before the trial ends.",
+    ko: "14일 무료 체험 후 월 $3.99가 결제돼요. 체험 종료 전 언제든 취소할 수 있어요.",
+    en: "14-day free trial, then $3.99/month. Cancel anytime before the trial ends.",
   },
   "plan.subscribeCta": { ko: "무료 체험 시작하기", en: "Start free trial" },
+  "plan.subscribeFamilyCta": {
+    ko: "가족 플랜 시작하기 ($9.99/월, 최대 5명)",
+    en: "Start family plan ($9.99/mo, up to 5 people)",
+  },
+  "plan.convertToFamily": { ko: "가족 플랜으로 전환", en: "Switch to family plan" },
   "plan.passphrasePlaceholder": { ko: "가족 패스프레이즈", en: "Family passphrase" },
   "plan.passphraseSubmit": { ko: "확인", en: "Redeem" },
   "plan.passphraseInvalid": { ko: "패스프레이즈가 올바르지 않아요.", en: "That passphrase isn't valid." },
@@ -112,10 +117,36 @@ const STRINGS = {
     en: "Your trial has ended or a subscription is needed",
   },
   "plan.paywallHint": {
-    ko: "7일 무료 체험 후 월 $3.99예요. 언제든 취소할 수 있어요.",
-    en: "7-day free trial, then $3.99/month. Cancel anytime.",
+    ko: "14일 무료 체험 후 월 $3.99예요. 언제든 취소할 수 있어요.",
+    en: "14-day free trial, then $3.99/month. Cancel anytime.",
   },
   "plan.startingCheckout": { ko: "이동 중…", en: "Redirecting…" },
+
+  "family.ownerTitle": { ko: "가족 플랜 관리", en: "Manage family plan" },
+  "family.inviteLinkLabel": { ko: "초대 링크", en: "Invite link" },
+  "family.copyLink": { ko: "링크 복사", en: "Copy link" },
+  "family.linkCopied": { ko: "복사됐어요", en: "Copied" },
+  "family.regenerateLink": { ko: "링크 재발급", en: "Regenerate link" },
+  "family.membersHeading": { ko: "가족 구성원", en: "Family members" },
+  "family.noMembersYet": { ko: "아직 초대한 사람이 없어요.", en: "No one has joined yet." },
+  "family.removeMember": { ko: "제거", en: "Remove" },
+  "family.leaveButton": { ko: "가족 플랜 나가기", en: "Leave family plan" },
+  "family.inactiveOwnerHint": {
+    ko: "이 가족 플랜은 더 이상 활성화되어 있지 않아요.",
+    en: "This family plan is no longer active.",
+  },
+  "family.join.loading": { ko: "확인 중…", en: "Checking…" },
+  "family.join.acceptCta": { ko: "참여하기", en: "Join" },
+  "family.join.accepting": { ko: "참여 중…", en: "Joining…" },
+  "family.join.acceptedRedirect": { ko: "가족 플랜에 참여했어요! 이동 중…", en: "You've joined the family plan! Redirecting…" },
+  "family.join.reason.not_found": { ko: "유효하지 않은 초대 링크예요.", en: "This invite link isn't valid." },
+  "family.join.reason.full": { ko: "이 가족 플랜은 이미 꽉 찼어요.", en: "This family plan is already full." },
+  "family.join.reason.already_member": {
+    ko: "이미 다른 가족 플랜에 속해 있어요. 먼저 나가야 참여할 수 있어요.",
+    en: "You're already part of a family plan. Leave it first to join a different one.",
+  },
+  "family.join.reason.is_owner": { ko: "본인의 가족 플랜에는 참여할 수 없어요.", en: "You can't join your own family plan." },
+  "family.join.failed": { ko: "참여에 실패했어요. 다시 시도해주세요.", en: "Failed to join. Please try again." },
 
   "settings.title": { ko: "설정", en: "Settings" },
   "settings.account": { ko: "계정", en: "Account" },
@@ -247,4 +278,24 @@ export function readingActivityHeading(lang: Lang, count: number, scope: "cycle"
 
 export function listenToAria(lang: Lang, book: string, chapter: number): string {
   return lang === "ko" ? `${book} ${chapter}장 듣기` : `Listen to ${book} ${chapter}`;
+}
+
+export function familySlotsLabel(lang: Lang, used: number, total: number): string {
+  return lang === "ko" ? `${used}/${total}명 사용 중` : `${used}/${total} people`;
+}
+
+// users.name is nullable (Google OAuth normally sets it, but nothing guarantees it) — falls back
+// to a generic term rather than showing "null님의 가족 플랜".
+function displayName(lang: Lang, name: string | null): string {
+  return name ?? (lang === "ko" ? "가족 플랜 소유자" : "the plan owner");
+}
+
+export function familyMemberOfLabel(lang: Lang, ownerName: string | null): string {
+  const name = displayName(lang, ownerName);
+  return lang === "ko" ? `${name}님의 가족 플랜에 속해 있어요` : `Covered by ${name}'s family plan`;
+}
+
+export function familyJoinPrompt(lang: Lang, ownerName: string | null): string {
+  const name = displayName(lang, ownerName);
+  return lang === "ko" ? `${name}님의 가족 플랜에 참여하시겠어요?` : `Join ${name}'s family plan?`;
 }

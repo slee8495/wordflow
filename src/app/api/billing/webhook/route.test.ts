@@ -50,7 +50,7 @@ describe("billing webhook", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("checkout.session.completed writes customer/subscription/status/period-end", async () => {
+  it("checkout.session.completed writes customer/subscription/status/period-end/planType", async () => {
     constructEventMock.mockReturnValue({
       type: "checkout.session.completed",
       data: {
@@ -63,7 +63,7 @@ describe("billing webhook", () => {
     });
     retrieveSubscriptionMock.mockResolvedValue({
       status: "trialing",
-      items: { data: [{ current_period_end: 1_700_000_000 }] },
+      items: { data: [{ current_period_end: 1_700_000_000, price: { id: "price_unrecognized" } }] },
     });
 
     const res = await POST(makeRequest("{}"));
@@ -75,27 +75,32 @@ describe("billing webhook", () => {
       stripeSubscriptionId: "sub_123",
       subscriptionStatus: "trialing",
       currentPeriodEnd: new Date(1_700_000_000 * 1000),
+      planType: null, // "price_unrecognized" doesn't match STRIPE_PRICE_ID or STRIPE_FAMILY_PRICE_ID
     });
   });
 
-  it("customer.subscription.updated syncs status by stripeCustomerId, not user id", async () => {
+  it("customer.subscription.updated re-fetches current state and syncs by stripeCustomerId, not user id", async () => {
+    // The route re-fetches via stripe.subscriptions.retrieve() rather than trusting this event's
+    // embedded snapshot (Stripe doesn't guarantee delivery order) — only `id` from the event is
+    // actually used, the written fields come from the mocked retrieve() response below.
     constructEventMock.mockReturnValue({
       type: "customer.subscription.updated",
-      data: {
-        object: {
-          customer: "cus_456",
-          status: "active",
-          items: { data: [{ current_period_end: 1_800_000_000 }] },
-        },
-      },
+      data: { object: { id: "sub_456" } },
+    });
+    retrieveSubscriptionMock.mockResolvedValue({
+      customer: "cus_456",
+      status: "active",
+      items: { data: [{ current_period_end: 1_800_000_000, price: { id: "price_unrecognized" } }] },
     });
 
     const res = await POST(makeRequest("{}"));
 
     expect(res.status).toBe(200);
+    expect(retrieveSubscriptionMock).toHaveBeenCalledWith("sub_456");
     expect(setMock).toHaveBeenCalledWith({
       subscriptionStatus: "active",
       currentPeriodEnd: new Date(1_800_000_000 * 1000),
+      planType: null,
     });
   });
 
