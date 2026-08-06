@@ -19,6 +19,7 @@ const sectionSourceId = (id: string) => `today-${id}`;
 
 type WorshipLink = { title: string; url: string };
 type Reading = {
+  forDate: string;
   theme: string;
   themeEn: string | null;
   storySummary: string;
@@ -141,11 +142,14 @@ export default function Home() {
   const [error, setError] = useState<UiStringKey | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [generatingNext, setGeneratingNext] = useState(false);
-  // null means "today" — the only mode that can generate new readings. Any other value is a past
-  // date being browsed read-only via /api/reading/history.
+  // null means "current" — the only mode that can generate new readings (via readNext below).
+  // Any other value is a past date being browsed read-only via /api/reading/history. In "current"
+  // mode the app no longer auto-advances just because the real calendar date changed — it stays on
+  // whatever was last revealed, so effectiveDate follows that reading's own forDate rather than
+  // today's real date; it only falls back to the real date before the first reading has loaded.
   const [viewDate, setViewDate] = useState<string | null>(null);
   const todayDateString = dateStringInTimezone(timezone);
-  const effectiveDate = viewDate ?? todayDateString;
+  const effectiveDate = viewDate ?? readings[0]?.forDate ?? todayDateString;
   const isToday = viewDate === null;
 
   function speakingSectionFor(id: string): { id: string; state: SpeakState } | null {

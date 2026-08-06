@@ -436,28 +436,34 @@ async function ensurePrefetchedNext(profileId: number): Promise<void> {
   });
 }
 
-// The FIRST reading of a calendar day (idempotent GET path only, never "read next"): if today
-// falls in an active season window (Holy Week / Christmas / Thanksgiving — see src/lib/season.ts),
-// serves that season's reading instead of the normal rotation, without touching the cursor at
-// all. Because the cursor is untouched, any *subsequent* reading that day (via "read next", which
-// always calls buildReading directly, bypassing this function) falls straight back to normal
-// progress — that's the "regenerating during a season always catches up" behavior — and the
-// cursor resumes exactly where it was once the season window closes.
-async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
+// Looks up today's season-specific curriculum item (Holy Week / Christmas / Thanksgiving — see
+// src/lib/season.ts), or null outside any active window. Seasons are the one deliberate exception
+// to the "stay on whatever was last revealed" rule below: they're an intentional day-by-day
+// series, so each new season day is still meant to swap in automatically.
+async function activeSeasonItemFor(profile: Profile): Promise<CurriculumItem | null> {
   const activeSeason = getActiveSeason(profileDateString(profile));
-  if (activeSeason) {
-    const [seasonItem] = await db
-      .select()
-      .from(curriculumItems)
-      .where(
-        and(
-          eq(curriculumItems.season, activeSeason.season),
-          eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
-        ),
-      )
-      .limit(1);
-    if (seasonItem) return buildReadingForItem(profile, forDate, seasonItem);
-  }
+  if (!activeSeason) return null;
+  const [seasonItem] = await db
+    .select()
+    .from(curriculumItems)
+    .where(
+      and(
+        eq(curriculumItems.season, activeSeason.season),
+        eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
+      ),
+    )
+    .limit(1);
+  return seasonItem ?? null;
+}
+
+// The very first reading a brand-new profile ever gets: if today falls in an active season
+// window, serves that season's reading instead of the normal rotation, without touching the
+// cursor at all. Because the cursor is untouched, any *subsequent* reading that day (via "read
+// next", which always calls buildReading directly, bypassing this function) falls straight back
+// to normal progress, and the cursor resumes exactly where it was once the season window closes.
+async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
+  const seasonItem = await activeSeasonItemFor(profile);
+  if (seasonItem) return buildReadingForItem(profile, forDate, seasonItem);
   return revealOrGenerate(profile, forDate);
 }
 
@@ -471,38 +477,6 @@ export async function catchUpReading(profile: Profile, orderIndex: number, forDa
   return buildReadingForItem(profile, forDate, item, createdAt);
 }
 
-// Returns today's most recent reading if one already exists, otherwise reveals/generates the
-// first one for today. Idempotent for repeat calls with nothing new to do — safe for /api/today
-// and the chat assistant to call on every visit without spamming generations. The cursor only
-// ever advances when a profile actually shows up (there's no background job pre-generating it on
-// a schedule) — a day nobody visits doesn't silently consume a cursor step; the next visit
-// (whenever that is) picks up right where it left off. Also tops up the one-item prefetch buffer
-// in the background (after() — doesn't add latency here) so that visit's *next* passage is ready
-// before it's asked for.
-export async function generateDailyReading(profile: Profile) {
-  const forDate = profileDateString(profile);
-  after(() => ensurePrefetchedNext(profile.id));
-
-  return withProfileLock(profile.id, async () => {
-    const [existing] = await db
-      .select()
-      .from(readings)
-      .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
-      .orderBy(desc(readings.createdAt))
-      .limit(1);
-    if (existing) {
-      const [existingItem] = await db
-        .select()
-        .from(curriculumItems)
-        .where(eq(curriculumItems.id, existing.curriculumItemId))
-        .limit(1);
-      return { ...existing, passageRef: existingItem?.passageRef ?? null };
-    }
-
-    return buildFirstReadingOfDay(profile, forDate);
-  });
-}
-
 // User-triggered "read next" action: reveals the buffered reading if one's ready (instant) or
 // generates on the spot as a fallback, either way advancing the cursor, regardless of whether a
 // reading already exists for today. Lets someone who finishes today's reading keep going the
@@ -513,21 +487,37 @@ export async function generateNextReading(profile: Profile) {
   return withProfileLock(profile.id, () => revealOrGenerate(profile, profileDateString(profile)));
 }
 
-// All of today's readings for a profile, oldest first, so the UI can page back and forth
-// through however many times someone has read ahead today. Generates the first one if none
-// exist yet, same as generateDailyReading.
+// The readings the "Today" tab currently shows, oldest first, so the UI can page back and forth
+// through however many times someone has read ahead in one sitting (via "read next"). Opening the
+// app on a later calendar day does NOT walk this forward on its own — the profile stays on
+// whatever was last revealed (and any others sharing its forDate) until they explicitly tap "read
+// next" (see generateNextReading). The one exception is an active season window: that's an
+// intentional day-by-day series, so a new season day still swaps in automatically even without a
+// "read next" tap. Generates the very first reading ever for a brand-new profile, same as before.
 export async function getTodayReadings(profile: Profile) {
   const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
 
   const rows = await withProfileLock(profile.id, async () => {
-    const existing = await db
+    const [latest] = await db
       .select()
       .from(readings)
-      .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, forDate), eq(readings.revealed, true)))
-      .orderBy(readings.createdAt);
+      .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, true)))
+      .orderBy(desc(readings.createdAt))
+      .limit(1);
 
-    return existing.length > 0 ? existing : [await buildFirstReadingOfDay(profile, forDate)];
+    if (!latest) return [await buildFirstReadingOfDay(profile, forDate)];
+
+    const seasonItem = await activeSeasonItemFor(profile);
+    if (seasonItem && seasonItem.id !== latest.curriculumItemId) {
+      return [await buildReadingForItem(profile, forDate, seasonItem)];
+    }
+
+    return db
+      .select()
+      .from(readings)
+      .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, latest.forDate), eq(readings.revealed, true)))
+      .orderBy(readings.createdAt);
   });
 
   return Promise.all(
@@ -570,59 +560,43 @@ export async function getReadingsForDate(profile: Profile, forDate: string) {
 // first request of the day (the one that actually decides that day's forDate) could race ahead of
 // the sync and generate against DEFAULT_TIMEZONE — a mistake that then persists for that whole
 // calendar day. Every read-heavy route that calls requireProfile() (src/lib/authProfile.ts) and
-// then immediately does something forDate-sensitive (generateDailyReading, getTodayReadings,
-// etc.) should pass through here first with whatever timezone the client's TimezoneProvider
-// currently has.
+// then immediately does something forDate-sensitive (getTodayReadings, generateNextReading, etc.)
+// should pass through here first with whatever timezone the client's TimezoneProvider currently
+// has.
 export async function syncProfileTimezone(profile: Profile, timezone: string | null | undefined): Promise<Profile> {
   if (!timezone || profile.timezone === timezone) return profile;
   const [updated] = await db.update(profiles).set({ timezone }).where(eq(profiles.id, profile.id)).returning();
   return updated ?? profile;
 }
 
-// Read-only: reports which curriculum item a profile's cursor is CURRENTLY sitting on, without
-// generating a reading or advancing anything. Mirrors buildReading/buildFirstReadingOfDay's own
-// season-then-rotation lookup so the answer always matches what actually shows up if the profile
-// opens the app right now — but must NEVER call buildReading/generateDailyReading itself, since
-// this is used by the morning-reminder cron and calling either of those on a schedule is exactly
-// the bug that removing the old nightly cron fixed (see vercel.ts): it would silently consume a
-// curriculum step for every profile whether or not they actually visited that day.
+// Read-only: reports whichever curriculum item is CURRENTLY being shown to the profile — the same
+// thing getTodayReadings would return, without generating or advancing anything — so the
+// morning-reminder cron's notification always describes what's actually on screen right now
+// (season item, else the latest revealed reading), never the buffered "next" item that only shows
+// up once the profile explicitly taps "read next". Must NEVER call buildReading/getTodayReadings
+// itself, since this is used on a schedule and calling either of those would silently consume a
+// curriculum step for every profile whether or not they actually visited that day (see vercel.ts).
 export async function peekCurrentCurriculumItem(profile: Profile): Promise<CurriculumItem | null> {
-  const activeSeason = getActiveSeason(profileDateString(profile));
-  if (activeSeason) {
-    const [seasonItem] = await db
-      .select()
-      .from(curriculumItems)
-      .where(
-        and(
-          eq(curriculumItems.season, activeSeason.season),
-          eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
-        ),
-      )
-      .limit(1);
-    if (seasonItem) return seasonItem;
-  }
+  const seasonItem = await activeSeasonItemFor(profile);
+  if (seasonItem) return seasonItem;
 
-  // revealOrGenerate() (what actually runs when the profile opens the app) reveals this buffered
-  // item first if one's ready, rather than generating fresh from cursorPosition — and buildReading
-  // already advanced cursorPosition PAST it the moment it was buffered (see ensurePrefetchedNext).
-  // Skipping this check and reading cursorPosition directly was landing on the item *after* the
-  // one that's actually about to be revealed — the notification and the app disagreeing by
-  // exactly one curriculum step.
-  const [hidden] = await db
+  const [latest] = await db
     .select({ curriculumItemId: readings.curriculumItemId })
     .from(readings)
-    .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, false)))
-    .orderBy(readings.createdAt)
+    .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, true)))
+    .orderBy(desc(readings.createdAt))
     .limit(1);
-  if (hidden) {
-    const [hiddenItem] = await db
+  if (latest) {
+    const [latestItem] = await db
       .select()
       .from(curriculumItems)
-      .where(eq(curriculumItems.id, hidden.curriculumItemId))
+      .where(eq(curriculumItems.id, latest.curriculumItemId))
       .limit(1);
-    if (hiddenItem) return hiddenItem;
+    if (latestItem) return latestItem;
   }
 
+  // No revealed reading exists at all yet — a brand-new profile who's never opened the app.
+  // Falls back to cursorPosition, which is still 0 at that point.
   const [total] = await db
     .select({ count: sql<number>`count(*)` })
     .from(curriculumItems)

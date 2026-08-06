@@ -21,8 +21,8 @@ export const maxDuration = 60;
 // once per profile per day — the 15-minute polling means a profile's chosen hour is "hit" on
 // whichever invocation lands first after it begins, then skipped for the rest of that day.
 //
-// Deliberately never calls generateDailyReading/buildReading: this only *reads* the profile's
-// current cursor position via peekCurrentCurriculumItem, matching what removing the old nightly
+// Deliberately never calls getTodayReadings/buildReading: this only *reads* whichever passage the
+// profile is currently on via peekCurrentCurriculumItem, matching what removing the old nightly
 // cron was about (see vercel.ts) — a profile nobody has opened the app for today must not have
 // its curriculum position touched just because this ran.
 export async function GET(req: NextRequest) {

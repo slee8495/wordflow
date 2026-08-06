@@ -8,12 +8,12 @@ import { peekCurrentCurriculumItem } from "@/lib/generateReading";
 // Only ever touches disposable rows it creates itself under a unique profile name, cleaned up in
 // afterEach; never reads or writes any real profile's data.
 //
-// Regression test for the morning-notification bug: peekCurrentCurriculumItem used to compute its
-// answer straight from cursorPosition, but buildReading() always advances cursorPosition the
-// moment a reading is buffered ahead of time — including the hidden prefetch buffer — so
-// cursorPosition already points one step past whatever the buffered "next" reading actually is.
-// The app itself reveals that buffered reading, not whatever's at cursorPosition, so the old
-// behavior was consistently one chapter ahead of what actually showed up when the app was opened.
+// Regression coverage for the "stay on the current passage" behavior: opening the app on a later
+// calendar day must not silently reveal the next curriculum item — peekCurrentCurriculumItem (used
+// by the morning-reminder cron) must describe the latest REVEALED reading, never cursorPosition
+// (which buildReading already advances past it the moment a reading is buffered ahead of time) and
+// never a hidden, not-yet-revealed prefetch buffer (which only becomes visible once the profile
+// explicitly taps "read next").
 
 const testProfileName = `test-peek-${Date.now()}`;
 let createdProfileId: number | null = null;
@@ -36,18 +36,43 @@ async function makeProfile(cursorPosition: number) {
 }
 
 describe("peekCurrentCurriculumItem", () => {
-  it("prefers the hidden prefetch buffer over cursorPosition when one exists", async () => {
-    const [itemAtCursor, itemBeforeCursor] = await Promise.all([
+  it("prefers the latest revealed reading over cursorPosition", async () => {
+    const [itemAtCursor, itemCurrentlyShown] = await Promise.all([
+      db.select().from(curriculumItems).where(and(isNull(curriculumItems.season), eq(curriculumItems.orderIndex, 5))).limit(1).then((r) => r[0]),
+      db.select().from(curriculumItems).where(and(isNull(curriculumItems.season), eq(curriculumItems.orderIndex, 3))).limit(1).then((r) => r[0]),
+    ]);
+
+    // Simulates the real "stay" behavior: cursorPosition (5) has already moved on ahead via the
+    // prefetch buffer, but the profile hasn't actually read past order_index 3 yet — the
+    // notification should describe what's on screen right now (3), not the cursor's position.
+    const profile = await makeProfile(5);
+    await db.insert(readings).values({
+      profileId: profile.id,
+      curriculumItemId: itemCurrentlyShown.id,
+      forDate: new Date().toISOString().slice(0, 10),
+      theme: "test",
+      storySummary: "test",
+      historicalContext: "test",
+      personalMessage: "test",
+      revealed: true,
+    });
+
+    const result = await peekCurrentCurriculumItem(profile);
+
+    expect(result?.id).toBe(itemCurrentlyShown.id);
+    expect(result?.id).not.toBe(itemAtCursor.id);
+  });
+
+  it("ignores a hidden, not-yet-revealed prefetch buffer", async () => {
+    const [itemAtCursor, hiddenBufferItem] = await Promise.all([
       db.select().from(curriculumItems).where(and(isNull(curriculumItems.season), eq(curriculumItems.orderIndex, 5))).limit(1).then((r) => r[0]),
       db.select().from(curriculumItems).where(and(isNull(curriculumItems.season), eq(curriculumItems.orderIndex, 4))).limit(1).then((r) => r[0]),
     ]);
 
-    // Simulates the real sequence: cursorPosition (5) already advanced past the buffered item
-    // (order_index 4) the moment ensurePrefetchedNext buffered it.
     const profile = await makeProfile(5);
     await db.insert(readings).values({
       profileId: profile.id,
-      curriculumItemId: itemBeforeCursor.id,
+      curriculumItemId: hiddenBufferItem.id,
       forDate: new Date().toISOString().slice(0, 10),
       theme: "test",
       storySummary: "test",
@@ -58,11 +83,11 @@ describe("peekCurrentCurriculumItem", () => {
 
     const result = await peekCurrentCurriculumItem(profile);
 
-    expect(result?.id).toBe(itemBeforeCursor.id);
-    expect(result?.id).not.toBe(itemAtCursor.id);
+    expect(result?.id).toBe(itemAtCursor.id);
+    expect(result?.id).not.toBe(hiddenBufferItem.id);
   });
 
-  it("falls back to cursorPosition when there's no hidden buffer", async () => {
+  it("falls back to cursorPosition when there's no reading at all yet", async () => {
     const [itemAtCursor] = await db
       .select()
       .from(curriculumItems)
