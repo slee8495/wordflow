@@ -128,6 +128,19 @@ const EXCLUDE_TERMS = [
   "chords",
   "tutorial",
   "how to play",
+  // Latin-script non-English worship content — matchesLanguage() below can only tell scripts
+  // apart, not actual languages, so a channel that names its own language in English (reported:
+  // "Hope Filipino Worship", then "Catholic Swahili Worship" once the Filipino case was fixed —
+  // both won an English-language search purely because their language name is written in the
+  // Latin alphabet, same as English) sails right through it. An explicit language-name marker
+  // catches the clearest cases without needing real per-language detection.
+  "filipino",
+  "tagalog",
+  "swahili",
+  // Catholic-liturgical content — English equivalent of 신부/미사/성당/수녀 above (reported:
+  // a Catholic "offertory" song surfacing for an English worship search).
+  "catholic",
+  "offertory",
 ];
 
 // Positive signal that a result is actually a song, not just uncategorized/mislabeled spoken
