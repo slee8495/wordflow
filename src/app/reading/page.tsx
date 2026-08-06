@@ -20,7 +20,6 @@ import { useUiLanguage } from "../UiLanguageProvider";
 import { useUser } from "../UserProvider";
 import { saveBookmark } from "@/lib/bookmark";
 
-const LANG_KEY = "wordflow:lang";
 const READING_SOURCE_ID = "reading-passage";
 
 // Sequential magnitude color for the two headline meters (books touched, current book) — a
@@ -112,9 +111,7 @@ const SCOPE_OPTIONS: { key: UiStringKey; scope: ProgressScope }[] = [
   { key: "progress.allTime", scope: "all" },
 ];
 
-// `lang` is the Bible content language (drives book-name abbreviations only); the UI chrome
-// below follows the separate app-wide UI language from useUiLanguage().
-function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) {
+function ProgressDashboard({ name }: { name: string }) {
   const { uiLang, t } = useUiLanguage();
   const [scope, setScope] = useState<ProgressScope>("cycle");
   const [progress, setProgress] = useState<ProgressPayload | null>(null);
@@ -139,7 +136,7 @@ function ProgressDashboard({ name, lang }: { name: string; lang: "ko" | "en" }) 
   if (error) return <p className="text-sm text-red-600 dark:text-red-400">{t(error)}</p>;
   if (!progress) return null;
 
-  const abbrev = lang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
+  const abbrev = uiLang === "en" ? ENGLISH_BOOK_ABBREV : KOREAN_BOOK_ABBREV;
   const started = progress.currentBook !== null;
 
   return (
@@ -263,7 +260,6 @@ export default function ReadingPage() {
   const { name, plan, readingBookmark } = useUser();
   const { uiLang, t } = useUiLanguage();
   const { sourceId, speakState: globalSpeakState, activeChunkIndex: globalActiveChunkIndex, playText, pause, resume, stop } = usePlayback();
-  const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [subTab, setSubTab] = useState<"browse" | "progress">("browse");
   const [selectedBook, setSelectedBook] = useState<string | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
@@ -285,20 +281,15 @@ export default function ReadingPage() {
     readingBookmark &&
     readingBookmark.book === selectedBook &&
     readingBookmark.chapter === selectedChapter &&
-    readingBookmark.lang === contentLanguage &&
+    readingBookmark.lang === uiLang &&
     readingBookmark.chunkIndex < passageChunks.length
       ? readingBookmark.chunkIndex
       : undefined;
 
   function speakPassage(startIndex?: number) {
     if (!passageText?.trim()) return;
-    playText(READING_SOURCE_ID, `${selectedBook} ${selectedChapter}`, passageText, startIndex, contentLanguage);
+    playText(READING_SOURCE_ID, `${selectedBook} ${selectedChapter}`, passageText, startIndex, uiLang);
   }
-
-  useEffect(() => {
-    const storedLang = localStorage.getItem(LANG_KEY);
-    if (storedLang === "en" || storedLang === "ko") setContentLanguage(storedLang);
-  }, []);
 
   // Auto-navigate to the last book/chapter browsed, once, instead of always landing on the book
   // grid. Guarded by bookmarkRestored (not just !selectedBook) so a user who deliberately backs out
@@ -327,7 +318,7 @@ export default function ReadingPage() {
         book: selectedBook,
         chapter: selectedChapter,
         chunkIndex: activeChunkIndexRef.current,
-        lang: contentLanguage,
+        lang: uiLang,
       });
     };
     if (speakState === "paused" || speakState === null) {
@@ -337,7 +328,7 @@ export default function ReadingPage() {
     if (speakState !== "playing") return;
     const interval = setInterval(save, 15000);
     return () => clearInterval(interval);
-  }, [isSpeakingThisPassage, speakState, selectedBook, selectedChapter, contentLanguage]);
+  }, [isSpeakingThisPassage, speakState, selectedBook, selectedChapter, uiLang]);
 
   useEffect(() => {
     if (!selectedBook || !selectedChapter || !name || !plan?.hasAccess) return;
@@ -353,7 +344,7 @@ export default function ReadingPage() {
     // cleanup function React runs before the next effect (or unmount), so a superseded request's
     // response is a no-op instead of clobbering whatever the current selection actually is.
     let cancelled = false;
-    fetch(`/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${contentLanguage}`)
+    fetch(`/api/reading/passage?book=${encodeURIComponent(selectedBook)}&chapter=${selectedChapter}&lang=${uiLang}`)
       .then((res) => {
         if (!res.ok) throw new Error("failed to load passage");
         return res.json();
@@ -376,12 +367,7 @@ export default function ReadingPage() {
     // isSpeakingThisPassage/stop deliberately excluded — this should only re-run on book/chapter/
     // lang/name changes, not every time global playback state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBook, selectedChapter, contentLanguage, name, plan?.hasAccess]);
-
-  function setLanguage(lang: "ko" | "en") {
-    setContentLanguage(lang);
-    localStorage.setItem(LANG_KEY, lang);
-  }
+  }, [selectedBook, selectedChapter, uiLang, name, plan?.hasAccess]);
 
   const book = BIBLE_BOOKS.find((b) => b.name === selectedBook) ?? null;
 
@@ -417,36 +403,14 @@ export default function ReadingPage() {
             {t("reading.progressTab")}
           </button>
         </div>
-        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
-          <button
-            onClick={() => setLanguage("ko")}
-            className={`rounded-full px-2 py-1 ${
-              contentLanguage === "ko"
-                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
-                : "text-[var(--ink-soft)]"
-            }`}
-          >
-            한글
-          </button>
-          <button
-            onClick={() => setLanguage("en")}
-            className={`rounded-full px-2 py-1 ${
-              contentLanguage === "en"
-                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
-                : "text-[var(--ink-soft)]"
-            }`}
-          >
-            English
-          </button>
-        </div>
       </div>
 
-      {subTab === "progress" && <ProgressDashboard name={name} lang={contentLanguage} />}
+      {subTab === "progress" && <ProgressDashboard name={name} />}
 
       {subTab === "browse" && !selectedBook && (
         <div className="flex flex-col gap-4">
-          <BookGrid testament="old" title={t("progress.oldTestament")} lang={contentLanguage} onPick={setSelectedBook} />
-          <BookGrid testament="new" title={t("progress.newTestament")} lang={contentLanguage} onPick={setSelectedBook} />
+          <BookGrid testament="old" title={t("progress.oldTestament")} lang={uiLang} onPick={setSelectedBook} />
+          <BookGrid testament="new" title={t("progress.newTestament")} lang={uiLang} onPick={setSelectedBook} />
         </div>
       )}
 
@@ -540,7 +504,7 @@ export default function ReadingPage() {
                   ))}
                 </p>
                 <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
-                  {contentLanguage === "en"
+                  {uiLang === "en"
                     ? "NLT (New Living Translation)"
                     : "AI가 영어 NLT 성경을 바탕으로 쉬운 한글로 다시 표현한 본문이에요 (개역개정 등 특정 번역본이 아니에요)."}
                 </p>

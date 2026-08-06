@@ -15,7 +15,6 @@ import { useTimezone } from "./TimezoneProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
 
-const LANG_KEY = "wordflow:lang";
 const sectionSourceId = (id: string) => `today-${id}`;
 
 type WorshipLink = { title: string; url: string };
@@ -141,7 +140,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<UiStringKey | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
-  const [contentLanguage, setContentLanguage] = useState<"ko" | "en">("ko");
   const [generatingNext, setGeneratingNext] = useState(false);
   // null means "today" — the only mode that can generate new readings. Any other value is a past
   // date being browsed read-only via /api/reading/history.
@@ -158,7 +156,7 @@ export default function Home() {
   // still falls within the current text's chunk count (content can get regenerated after a quality
   // fix, which would make an old index point at a different sentence or run past the end).
   function resumeIndexFor(section: "context" | "passage" | "message", text: string | null): number | undefined {
-    if (!todayBookmark || !text || todayBookmark.section !== section || todayBookmark.lang !== contentLanguage) {
+    if (!todayBookmark || !text || todayBookmark.section !== section || todayBookmark.lang !== uiLang) {
       return undefined;
     }
     if (section === "passage" && todayBookmark.view !== passageView) return undefined;
@@ -181,7 +179,7 @@ export default function Home() {
       saveBookmark("today", {
         section,
         chunkIndex: activeChunkIndexRef.current,
-        lang: contentLanguage,
+        lang: uiLang,
         ...(section === "passage" ? { view: passageView } : {}),
       });
     };
@@ -192,14 +190,7 @@ export default function Home() {
     if (globalSpeakState !== "playing") return;
     const interval = setInterval(save, 15000);
     return () => clearInterval(interval);
-  }, [sourceId, globalSpeakState, contentLanguage, passageView]);
-
-  useEffect(() => {
-    const storedLang = localStorage.getItem(LANG_KEY);
-    if (storedLang === "en" || storedLang === "ko") {
-      setContentLanguage(storedLang);
-    }
-  }, []);
+  }, [sourceId, globalSpeakState, uiLang, passageView]);
 
   useEffect(() => {
     if (!name || !plan?.hasAccess) return;
@@ -234,14 +225,9 @@ export default function Home() {
     setViewDate(next >= todayDateString ? null : next);
   }
 
-  function setLanguage(lang: "ko" | "en") {
-    setContentLanguage(lang);
-    localStorage.setItem(LANG_KEY, lang);
-  }
-
   function speakSection(id: string, label: string, text: string | null, startIndex?: number) {
     if (!text?.trim()) return;
-    playText(sectionSourceId(id), label, text, startIndex, contentLanguage);
+    playText(sectionSourceId(id), label, text, startIndex, uiLang);
   }
 
   async function readNext() {
@@ -289,10 +275,10 @@ export default function Home() {
   }
 
   const reading = readings[index] ?? null;
-  const pick = (en: string | null | undefined, ko: string) => (contentLanguage === "en" ? (en ?? ko) : ko);
+  const pick = (en: string | null | undefined, ko: string) => (uiLang === "en" ? (en ?? ko) : ko);
 
   const passageText =
-    contentLanguage === "en"
+    uiLang === "en"
       ? ((passageView === "story" ? reading?.passageTextEnStory : reading?.passageTextEn) ??
         reading?.passageTextEnStory ??
         reading?.passageTextEn)
@@ -301,12 +287,12 @@ export default function Home() {
         reading?.passageTextKoVerses);
 
   const rangeLabel = reading?.passageRef
-    ? contentLanguage === "en"
+    ? uiLang === "en"
       ? formatPassageRefEnglish(reading.passageRef)
       : formatPassageRefKorean(reading.passageRef)
     : null;
 
-  const worshipLink = reading ? (contentLanguage === "en" ? reading.worshipLinkEn : reading.worshipLinkKo) : null;
+  const worshipLink = reading ? (uiLang === "en" ? reading.worshipLinkEn : reading.worshipLinkKo) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -315,28 +301,6 @@ export default function Home() {
           <ChevronButton direction="left" onClick={goToPreviousDay} ariaLabel={t("today.previousDay")} />
           <span className="text-sm text-[var(--ink-soft)]">{dayLabel}</span>
           <ChevronButton direction="right" onClick={goToNextDay} disabled={isToday} ariaLabel={t("today.nextDay")} />
-        </div>
-        <div className="flex gap-1 rounded-full bg-[var(--clay-tint)] p-0.5 text-xs">
-          <button
-            onClick={() => setLanguage("ko")}
-            className={`rounded-full px-2 py-1 ${
-              contentLanguage === "ko"
-                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
-                : "text-[var(--ink-soft)]"
-            }`}
-          >
-            한글
-          </button>
-          <button
-            onClick={() => setLanguage("en")}
-            className={`rounded-full px-2 py-1 ${
-              contentLanguage === "en"
-                ? "bg-[var(--paper-raised)] text-[var(--ink)] shadow-sm"
-                : "text-[var(--ink-soft)]"
-            }`}
-          >
-            English
-          </button>
         </div>
       </div>
 
@@ -434,7 +398,7 @@ export default function Home() {
                 />
               )}
               <p className="mt-2 text-xs text-[var(--ink-soft)] opacity-70">
-                {contentLanguage === "en"
+                {uiLang === "en"
                   ? passageView === "story"
                     ? "AI-adapted into story form, based on the NLT (New Living Translation)"
                     : "NLT (New Living Translation)"

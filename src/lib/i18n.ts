@@ -137,8 +137,8 @@ const STRINGS = {
   "settings.fontSizeHint": { ko: "앱 전체에 바로 적용돼요.", en: "Applies across the whole app instantly." },
   "settings.uiLanguage": { ko: "앱 언어", en: "App Language" },
   "settings.uiLanguageHint": {
-    ko: "앱의 메뉴와 버튼 문구 언어예요. 성경 본문 언어는 각 화면에서 따로 선택해요.",
-    en: "Changes the app's menus and labels. Bible passage language is chosen separately on each page.",
+    ko: "앱의 메뉴와 성경 본문 언어를 모두 바꿔요.",
+    en: "Changes the app's menus and the Bible passage language together.",
   },
   "settings.timezone": { ko: "시간대", en: "Timezone" },
   "settings.timezoneHint": {
