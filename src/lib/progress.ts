@@ -8,7 +8,7 @@
 // unit didn't match what a reader intuitively expects "% of Genesis" to mean. cycleCount and
 // the completion projection stay curriculum-entry-based, since those are specifically about
 // finishing the curriculum loop, a different (and still well-defined) concept.
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, deepReadingLogs, readings, type Profile } from "@/db/schema";
 import { BIBLE_BOOKS, chapterCountForBook } from "@/lib/bibleBooks";
@@ -93,21 +93,32 @@ export async function getReadingProgress(profile: Profile, scope: ProgressScope)
   let currentBookTotalChapters: number | null = null;
   let currentBookProgressPct: number | null = null;
 
-  // lastReadDate is only set once a profile has actually generated a reading — before that,
-  // cursorPosition is 0 with nothing "just read" yet, so there's no current book to report.
-  if (profile.lastReadDate !== null && curriculumLength > 0) {
-    const justReadIndex = (profile.cursorPosition - 1 + curriculumLength) % curriculumLength;
-    const [item] = await db
-      .select()
-      .from(curriculumItems)
-      .where(and(eq(curriculumItems.orderIndex, justReadIndex), isNull(curriculumItems.season)))
+  // Derived from the latest actually-revealed reading, not cursorPosition — cursorPosition is
+  // always one step ahead of what's really on screen (buildReading() advances it the moment the
+  // one-item prefetch buffer is generated, before the profile has actually reached that chapter —
+  // see ensurePrefetchedNext in generateReading.ts). Using cursorPosition - 1 here used to report
+  // the hidden buffered chapter as "current", one chapter ahead of what the profile had really
+  // read — the same bug class already fixed for the morning notification.
+  if (profile.lastReadDate !== null) {
+    const [latest] = await db
+      .select({ curriculumItemId: readings.curriculumItemId })
+      .from(readings)
+      .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, true)))
+      .orderBy(desc(readings.createdAt))
       .limit(1);
-    if (item) {
-      currentBook = item.book;
-      currentBookTotalChapters = chapterCountForBook(item.book);
-      currentBookChaptersTouched = touchedChapters.get(item.book)?.size ?? 0;
-      if (currentBookTotalChapters) {
-        currentBookProgressPct = (currentBookChaptersTouched / currentBookTotalChapters) * 100;
+    if (latest) {
+      const [item] = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.id, latest.curriculumItemId))
+        .limit(1);
+      if (item) {
+        currentBook = item.book;
+        currentBookTotalChapters = chapterCountForBook(item.book);
+        currentBookChaptersTouched = touchedChapters.get(item.book)?.size ?? 0;
+        if (currentBookTotalChapters) {
+          currentBookProgressPct = (currentBookChaptersTouched / currentBookTotalChapters) * 100;
+        }
       }
     }
   }
