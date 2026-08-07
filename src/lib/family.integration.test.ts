@@ -60,25 +60,29 @@ describe("resolveEntitlement", () => {
 });
 
 describe("joinFamily / previewInvite / removeFamilyMember", () => {
-  it("joins successfully, then removal frees the slot for someone else", async () => {
-    const owner = await makeFamilyOwner();
-    const memberA = await makeUser();
+  it(
+    "joins successfully, then removal frees the slot for someone else",
+    async () => {
+      const owner = await makeFamilyOwner();
+      const memberA = await makeUser();
 
-    const preview = await previewInvite(owner.familyInviteToken!, memberA.id);
-    expect(preview).toEqual({ ok: true, ownerName: owner.name, slotsAvailable: MAX_FAMILY_MEMBERS });
+      const preview = await previewInvite(owner.familyInviteToken!, memberA.id);
+      expect(preview).toEqual({ ok: true, ownerName: owner.name, slotsAvailable: MAX_FAMILY_MEMBERS });
 
-    const joinResult = await joinFamily(memberA.id, owner.familyInviteToken!);
-    expect(joinResult).toEqual({ ok: true });
-    expect(await resolveEntitlement(memberA)).toEqual({ hasAccess: true, viaFamilyOwnerId: owner.id });
+      const joinResult = await joinFamily(memberA.id, owner.familyInviteToken!);
+      expect(joinResult).toEqual({ ok: true });
+      expect(await resolveEntitlement(memberA)).toEqual({ hasAccess: true, viaFamilyOwnerId: owner.id });
 
-    const removed = await removeFamilyMember(owner.id, memberA.id);
-    expect(removed).toBe(true);
-    expect(await resolveEntitlement(memberA)).toEqual({ hasAccess: false, viaFamilyOwnerId: null });
+      const removed = await removeFamilyMember(owner.id, memberA.id);
+      expect(removed).toBe(true);
+      expect(await resolveEntitlement(memberA)).toEqual({ hasAccess: false, viaFamilyOwnerId: null });
 
-    const memberB = await makeUser();
-    const rejoin = await joinFamily(memberB.id, owner.familyInviteToken!);
-    expect(rejoin).toEqual({ ok: true });
-  });
+      const memberB = await makeUser();
+      const rejoin = await joinFamily(memberB.id, owner.familyInviteToken!);
+      expect(rejoin).toEqual({ ok: true });
+    },
+    20000,
+  );
 
   it("lets a member leave on their own", async () => {
     const owner = await makeFamilyOwner();

@@ -19,6 +19,8 @@
 // previous one is still preparing, the old call would eventually finish and start playing right
 // on top of the new one. A monotonic token invalidates any in-flight call as soon as a newer one
 // starts, so stale audio never gets played.
+import { spellOutKoreanNumbers } from "@/lib/koreanNumbers";
+
 const audioBufferCache = new Map<string, ArrayBuffer>();
 const inFlight = new Map<string, Promise<ArrayBuffer | null>>();
 // Reused across sessions instead of a fresh `new Audio()` every time — see the file header for
@@ -72,6 +74,15 @@ export function splitIntoChunks(text: string): string[] {
 // a single chunk, putting a second "(N) " mid-string.
 function stripVerseMarkers(text: string): string {
   return text.replace(/\(\d+\)\s*/g, "");
+}
+
+// Applies TTS-only text fixups without touching what's actually displayed/highlighted (see the
+// comment at the speak() call site below for why chunk boundaries stay keyed off the original
+// text). Korean number-spelling only applies for lang "ko" — English comma-grouped numbers
+// ("74,600") read correctly as-is, since English also groups by thousands.
+function prepareForTts(text: string, lang: "ko" | "en" | undefined): string {
+  const stripped = stripVerseMarkers(text);
+  return lang === "ko" ? spellOutKoreanNumbers(stripped) : stripped;
 }
 
 // Without an explicit lang, Android Chrome's speechSynthesis picks a voice by the device's
@@ -245,9 +256,9 @@ export async function speak(
   const requested = chunks.slice(startIndex);
 
   // Chunk boundaries/indices below (offsets, activeChunkIndex, highlighting) all stay keyed off
-  // the ORIGINAL `chunks`/`requested` text, so stripping markers only for the TTS request doesn't
+  // the ORIGINAL `chunks`/`requested` text, so transforming text only for the TTS request doesn't
   // shift anything the UI depends on for click-to-seek or highlight sync.
-  const buffers = await Promise.all(requested.map((chunk) => fetchAudioBuffer(stripVerseMarkers(chunk))));
+  const buffers = await Promise.all(requested.map((chunk) => fetchAudioBuffer(prepareForTts(chunk, opts.lang))));
   if (token !== playToken) return;
 
   // Chunks that failed to generate are quietly skipped from the combined file rather than
