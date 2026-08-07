@@ -7,19 +7,27 @@ type AdminUserRow = {
   email: string | null;
   profileName: string | null;
   subscriptionStatus: string | null;
+  planType: string | null;
   currentPeriodEnd: string | null;
   compFreeForever: boolean;
   compFreeUntil: string | null;
+  familyRole: "owner" | "member" | null;
+  familyMemberCount: number;
+  familyOwnerEmail: string | null;
+  referredByEmail: string | null;
+  referralGivenCount: number;
 };
 
-// Personal-use-only screen for the app operator: lists every signed-up account and lets them
-// grant comp access (e.g. "1 year free"). Not localized, not linked from AppNav — reachable only
-// by knowing the URL, and requireAdmin() (checked server-side on every API call this page makes)
-// is the real gate.
+// Personal-use-only screen for the app operator: lists every signed-up account, shows how each
+// one currently has access (real subscription / family plan / referral gift / comp grant), and
+// lets the operator grant or revoke comp access directly. Not localized, not linked from AppNav —
+// reachable only by knowing the URL, and requireAdmin() (checked server-side on every API call
+// this page makes) is the real gate.
 export default function AdminPage() {
   const [rows, setRows] = useState<AdminUserRow[] | null>(null);
   const [authorized, setAuthorized] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [daysInput, setDaysInput] = useState<Record<string, string>>({});
 
   function load() {
     fetch("/api/admin/users")
@@ -39,13 +47,13 @@ export default function AdminPage() {
     load();
   }, []);
 
-  async function grant(userId: string, days: number) {
+  async function act(userId: string, body: object) {
     setBusyUserId(userId);
     try {
       await fetch("/api/admin/grant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, days }),
+        body: JSON.stringify({ userId, ...body }),
       });
       load();
     } finally {
@@ -70,7 +78,10 @@ export default function AdminPage() {
             <th style={{ padding: "4px 8px" }}>Email</th>
             <th style={{ padding: "4px 8px" }}>Profile</th>
             <th style={{ padding: "4px 8px" }}>Sub status</th>
+            <th style={{ padding: "4px 8px" }}>Plan</th>
             <th style={{ padding: "4px 8px" }}>Period end</th>
+            <th style={{ padding: "4px 8px" }}>Family</th>
+            <th style={{ padding: "4px 8px" }}>Referral</th>
             <th style={{ padding: "4px 8px" }}>Free forever</th>
             <th style={{ padding: "4px 8px" }}>Comp until</th>
             <th style={{ padding: "4px 8px" }}>Actions</th>
@@ -82,19 +93,57 @@ export default function AdminPage() {
               <td style={{ padding: "4px 8px" }}>{row.email}</td>
               <td style={{ padding: "4px 8px" }}>{row.profileName}</td>
               <td style={{ padding: "4px 8px" }}>{row.subscriptionStatus ?? "—"}</td>
+              <td style={{ padding: "4px 8px" }}>{row.planType ?? "—"}</td>
               <td style={{ padding: "4px 8px" }}>
                 {row.currentPeriodEnd ? new Date(row.currentPeriodEnd).toLocaleDateString() : "—"}
+              </td>
+              <td style={{ padding: "4px 8px" }}>
+                {row.familyRole === "owner"
+                  ? `owner (${row.familyMemberCount}/4)`
+                  : row.familyRole === "member"
+                    ? `member of ${row.familyOwnerEmail}`
+                    : "—"}
+              </td>
+              <td style={{ padding: "4px 8px" }}>
+                {[row.referredByEmail ? `from ${row.referredByEmail}` : null, row.referralGivenCount > 0 ? `gave ${row.referralGivenCount}` : null]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
               </td>
               <td style={{ padding: "4px 8px" }}>{row.compFreeForever ? "yes" : "no"}</td>
               <td style={{ padding: "4px 8px" }}>{row.compFreeUntil ?? "—"}</td>
               <td style={{ padding: "4px 8px" }}>
-                <button
-                  onClick={() => grant(row.userId, 365)}
-                  disabled={busyUserId === row.userId}
-                  style={{ cursor: "pointer" }}
-                >
-                  Grant 1 year free
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="number"
+                    placeholder="days"
+                    value={daysInput[row.userId] ?? ""}
+                    onChange={(e) => setDaysInput((prev) => ({ ...prev, [row.userId]: e.target.value }))}
+                    style={{ width: 56, fontFamily: "monospace", fontSize: 13 }}
+                  />
+                  <button
+                    onClick={() => act(row.userId, { action: "grantDays", days: Number(daysInput[row.userId]) })}
+                    disabled={busyUserId === row.userId || !Number(daysInput[row.userId])}
+                    style={{ cursor: "pointer" }}
+                  >
+                    Grant days
+                  </button>
+                  <button
+                    onClick={() => act(row.userId, { action: "grantForever" })}
+                    disabled={busyUserId === row.userId}
+                    style={{ cursor: "pointer" }}
+                  >
+                    Grant forever
+                  </button>
+                  {(row.compFreeForever || row.compFreeUntil) && (
+                    <button
+                      onClick={() => act(row.userId, { action: "revoke" })}
+                      disabled={busyUserId === row.userId}
+                      style={{ cursor: "pointer" }}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
