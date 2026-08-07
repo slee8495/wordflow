@@ -148,6 +148,31 @@ const STRINGS = {
   "family.join.reason.is_owner": { ko: "본인의 가족 플랜에는 참여할 수 없어요.", en: "You can't join your own family plan." },
   "family.join.failed": { ko: "참여에 실패했어요. 다시 시도해주세요.", en: "Failed to join. Please try again." },
 
+  "referral.title": { ko: "친구 초대", en: "Invite friends" },
+  "referral.inviteHint": {
+    ko: "친구에게 2주 무료 체험권을 선물하세요. 최대 3명까지 가능해요.",
+    en: "Gift friends a 2-week free trial — up to 3 people.",
+  },
+  "referral.redeem.loading": { ko: "확인 중…", en: "Checking…" },
+  "referral.redeem.acceptCta": { ko: "받기", en: "Accept" },
+  "referral.redeem.accepting": { ko: "적용 중…", en: "Applying…" },
+  "referral.redeem.success": { ko: "2주 무료 체험이 시작됐어요!", en: "Your 2-week free trial has started!" },
+  "referral.redeem.reason.not_found": { ko: "유효하지 않은 초대 링크예요.", en: "This invite link isn't valid." },
+  "referral.redeem.reason.full": {
+    ko: "이 링크의 선물 가능 인원이 이미 다 찼어요.",
+    en: "This link's gift slots are already full.",
+  },
+  "referral.redeem.reason.already_redeemed": {
+    ko: "이미 추천 체험권을 받은 적이 있어요.",
+    en: "You've already redeemed a referral gift before.",
+  },
+  "referral.redeem.reason.is_self": { ko: "본인의 초대 링크는 사용할 수 없어요.", en: "You can't use your own invite link." },
+  "referral.redeem.reason.not_eligible": {
+    ko: "이 혜택은 처음 사용하는 분만 받을 수 있어요.",
+    en: "This gift is only for people who haven't used Wordflow before.",
+  },
+  "referral.redeem.failed": { ko: "적용에 실패했어요. 다시 시도해주세요.", en: "Failed to apply. Please try again." },
+
   "settings.title": { ko: "설정", en: "Settings" },
   "settings.account": { ko: "계정", en: "Account" },
   "settings.logout": { ko: "로그아웃", en: "Log out" },
@@ -298,4 +323,15 @@ export function familyMemberOfLabel(lang: Lang, ownerName: string | null): strin
 export function familyJoinPrompt(lang: Lang, ownerName: string | null): string {
   const name = displayName(lang, ownerName);
   return lang === "ko" ? `${name}님의 가족 플랜에 참여하시겠어요?` : `Join ${name}'s family plan?`;
+}
+
+export function referralSlotsLabel(lang: Lang, used: number, total: number): string {
+  return lang === "ko" ? `${used}/${total}명에게 선물함` : `${used}/${total} gifted`;
+}
+
+export function referralRedeemPrompt(lang: Lang, referrerName: string | null): string {
+  const name = referrerName ?? (lang === "ko" ? "친구" : "a friend");
+  return lang === "ko"
+    ? `${name}님이 2주 무료 체험권을 선물했어요. 받으시겠어요?`
+    : `${name} gifted you a 2-week free trial. Accept it?`;
 }

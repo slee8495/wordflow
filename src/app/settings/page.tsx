@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_NOTIFICATION_HOUR } from "@/lib/date";
 import { FONT_SCALES } from "@/lib/fontScale";
-import { familyMemberOfLabel, familySlotsLabel, fontScaleLabelKey, loggedInAs, type UiStringKey } from "@/lib/i18n";
+import {
+  familyMemberOfLabel,
+  familySlotsLabel,
+  fontScaleLabelKey,
+  loggedInAs,
+  referralSlotsLabel,
+  type UiStringKey,
+} from "@/lib/i18n";
 import { disableNotifications, enableNotifications, pushSupported, updateNotificationHour } from "@/lib/pushNotifications";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
 import { AuthScreen } from "../AuthScreen";
@@ -49,6 +56,11 @@ export default function SettingsPage() {
   } | null>(null);
   const [familyBusy, setFamilyBusy] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [referralInfo, setReferralInfo] = useState<{ inviteUrl: string; slotsUsed: number; slotsTotal: number } | null>(
+    null,
+  );
+  const [referralBusy, setReferralBusy] = useState(false);
+  const [referralLinkCopied, setReferralLinkCopied] = useState(false);
 
   async function deleteAccount() {
     if (deleteBusy) return;
@@ -92,6 +104,24 @@ export default function SettingsPage() {
       })
       .catch(() => {});
   }, [isFamilyOwner]);
+
+  // Only an actual paying subscriber (individual or family owner — a real Stripe subscription,
+  // active or still trialing) can hand out referral gift trials; family members and comp-only
+  // users can't (see isEligibleReferrer in src/lib/referral.ts, mirrored here for the UI gate).
+  const isEligibleReferrer = plan?.subscriptionStatus === "active" || plan?.subscriptionStatus === "trialing";
+
+  useEffect(() => {
+    if (!isEligibleReferrer) {
+      setReferralInfo(null);
+      return;
+    }
+    fetch("/api/referral/invite")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.inviteUrl) setReferralInfo(data);
+      })
+      .catch(() => {});
+  }, [isEligibleReferrer]);
 
   async function toggleNotifications() {
     if (!name || notificationsBusy) return;
@@ -218,6 +248,27 @@ export default function SettingsPage() {
     } finally {
       setFamilyBusy(false);
       await refreshPlan();
+    }
+  }
+
+  async function copyReferralLink() {
+    if (!referralInfo) return;
+    await navigator.clipboard.writeText(referralInfo.inviteUrl);
+    setReferralLinkCopied(true);
+    setTimeout(() => setReferralLinkCopied(false), 2000);
+  }
+
+  async function regenerateReferralLink() {
+    if (referralBusy) return;
+    setReferralBusy(true);
+    try {
+      const res = await fetch("/api/referral/invite/regenerate", { method: "POST" });
+      if (res.ok) {
+        const refreshed = await fetch("/api/referral/invite");
+        if (refreshed.ok) setReferralInfo(await refreshed.json());
+      }
+    } finally {
+      setReferralBusy(false);
     }
   }
 
@@ -434,6 +485,38 @@ export default function SettingsPage() {
             </form>
           )}
           {passphraseError && <p className="text-sm text-red-600 dark:text-red-400">{t(passphraseError)}</p>}
+        </section>
+      )}
+
+      {isEligibleReferrer && referralInfo && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-raised)] p-4">
+          <h2 className="text-sm font-semibold text-[var(--ink-soft)]">{t("referral.title")}</h2>
+          <p className="text-sm text-[var(--ink-soft)]">{t("referral.inviteHint")}</p>
+          <p className="text-xs text-[var(--ink-soft)]">
+            {referralSlotsLabel(uiLang, referralInfo.slotsUsed, referralInfo.slotsTotal)}
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={referralInfo.inviteUrl}
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-xs outline-none"
+            />
+            <button
+              type="button"
+              onClick={copyReferralLink}
+              className="shrink-0 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--ink-soft)] hover:border-[var(--clay)] hover:text-[var(--ink)]"
+            >
+              {referralLinkCopied ? t("family.linkCopied") : t("family.copyLink")}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={regenerateReferralLink}
+            disabled={referralBusy}
+            className="w-fit text-xs text-[var(--ink-soft)] hover:underline disabled:opacity-50"
+          >
+            {t("family.regenerateLink")}
+          </button>
         </section>
       )}
 

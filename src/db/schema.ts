@@ -31,7 +31,7 @@ export const users = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
 
-  // --- Stripe billing ($3.99/mo, 7-day trial via Stripe Checkout) ---
+  // --- Stripe billing ($3.99/mo individual or $9.99/mo family, 14-day trial via Stripe Checkout) ---
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   // Mirrors the Stripe Subscription object's own `status` (trialing/active/past_due/canceled/...)
@@ -56,6 +56,12 @@ export const users = pgTable("user", {
   // Lazily generated on first invite-link request, regenerable by the owner to invalidate a
   // leaked link. Not tied to plan type — harmless to exist on a non-family-plan user, just unused.
   familyInviteToken: text("family_invite_token").unique(),
+
+  // --- Referral gift trials (see src/lib/referral.ts) ---
+  // Lazily generated, same pattern as familyInviteToken — a paying subscriber's shareable link
+  // that grants a brand-new signup 14 free days (via compFreeUntil) without going through Stripe
+  // at all, capped at 3 successful redemptions per referrer (see referral_grants below).
+  referralToken: text("referral_token").unique(),
 });
 
 export const accounts = pgTable(
@@ -323,9 +329,28 @@ export const familyMemberships = pgTable("family_memberships", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// One row per successful referral redemption. referredUserId is UNIQUE — a person can only ever
+// redeem one referral gift, lifetime (separate from the "must never have subscribed before" check
+// in src/lib/referral.ts, which guards against an existing/lapsed subscriber double-dipping; this
+// guards against someone redeeming a second gift after their first 14 days lapses). The up-to-3
+// cap per referrer is enforced at insert time under a Postgres advisory lock (see
+// withReferralLock in src/lib/referral.ts), same pattern as familyMemberships above.
+export const referralGrants = pgTable("referral_grants", {
+  id: serial("id").primaryKey(),
+  referrerUserId: text("referrer_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  referredUserId: text("referred_user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
 export type Reading = typeof readings.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type FamilyMembership = typeof familyMemberships.$inferSelect;
+export type ReferralGrant = typeof referralGrants.$inferSelect;
