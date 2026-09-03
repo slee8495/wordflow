@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { curriculumItems, profiles, readings, users } from "@/db/schema";
 import { profileDateString } from "@/lib/date";
 import { getReadingProgress } from "@/lib/progress";
+import { GLOSSARY } from "./glossary";
 
 // A status report for Brownie (the SL Studio assistant app), so it can answer "지금 통독
 // 어디야?" / "오늘 말씀 어디야?" without the owner opening this app.
@@ -101,5 +102,8 @@ export async function GET(req: NextRequest) {
       readingsThisCycle: progress.activityCount,
       cycleStartedAt: progress.cycleStartedAt,
     },
+    // Sent every time rather than kept on Brownie's side, so this app's own words travel with
+    // its own numbers — see glossary.ts.
+    glossary: GLOSSARY,
   });
 }
