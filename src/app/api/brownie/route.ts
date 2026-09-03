@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings, users } from "@/db/schema";
 import { profileDateString } from "@/lib/date";
+import { getReadingProgress } from "@/lib/progress";
 
 // A status report for Brownie (the SL Studio assistant app), so it can answer "지금 통독
 // 어디야?" / "오늘 말씀 어디야?" without the owner opening this app.
@@ -71,6 +72,11 @@ export async function GET(req: NextRequest) {
         )
         .limit(1);
 
+  // The same numbers the progress dashboard shows — computed by the app's own function rather
+  // than a second copy of the maths here. The per-book breakdown (66 rows) is dropped: an
+  // assistant reads answers out loud, and a list that long is not an answer.
+  const progress = await getReadingProgress(profile, "cycle");
+
   return NextResponse.json({
     profile: profile.name,
     today,
@@ -81,7 +87,19 @@ export async function GET(req: NextRequest) {
       position: profile.cursorPosition,
       planLength,
       percent: planLength ? Math.round((profile.cursorPosition / planLength) * 100) : null,
+      remaining: Math.max(0, planLength - profile.cursorPosition),
       cycleCount: profile.cycleCount,
+      // null when nothing has been read in the trailing two weeks — there is no pace to
+      // project from. That is a real answer ("you have stopped"), not a missing one, so it is
+      // reported rather than hidden.
+      projectedCompletionDate: progress.projectedCompletionDate,
+      currentBook: progress.currentBook,
+      currentBookChaptersTouched: progress.currentBookChaptersTouched,
+      currentBookTotalChapters: progress.currentBookTotalChapters,
+      booksTouchedCount: progress.booksTouchedCount,
+      booksTotal: 66,
+      readingsThisCycle: progress.activityCount,
+      cycleStartedAt: progress.cycleStartedAt,
     },
   });
 }
