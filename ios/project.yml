@@ -1,0 +1,50 @@
+# XcodeGen 스펙. .xcodeproj 는 손으로 만들지 않는다 — pbxproj 는 사람이 고칠 물건이 아니고,
+# 이 파일이 있으면 `xcodegen generate` 로 언제든 다시 만들 수 있어서 커밋할 필요도 없다.
+# sl_strength/ios 와 같은 방식이다.
+name: Wordflow
+options:
+  bundleIdPrefix: com.slstudio
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: DX4YLNP9RK
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1"
+    # 올릴 때마다 하나씩 올린다. 안 올리면 App Store Connect 가 거절한다.
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  Wordflow:
+    type: application
+    platform: iOS
+    sources:
+      - path: Wordflow
+    # 낭독을 켜 두고 주머니에 넣는 것이 이 앱의 기본 사용법이다. 이게 없으면 화면이
+    # 꺼지는 순간 말씀 읽어주기가 멎는다 — 출근길에 듣는 사람에게는 그게 앱이 없는 것과 같다.
+    #
+    # `INFOPLIST_KEY_UIBackgroundModes` 로는 안 된다. Xcode 는 자기가 아는 키만 옮기고
+    # 모르는 것은 오류 없이 버리므로, 배열로 주는 이 키는 파일에 직접 적는다
+    # (sl_strength 에서 알람 설명문이 통째로 사라졌던 것과 같은 함정).
+    info:
+      path: Wordflow/Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.slstudio.wordflow
+        PRODUCT_NAME: Wordflow
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_CFBundleDisplayName: Wordflow
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleDefault
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # 아이폰 전용. 이걸 안 박으면 아이패드도 지원 대상이 되고, 그러면 애플이 멀티태스킹을
+        # 위해 네 방향을 전부 요구해서 업로드가 거절된다.
+        TARGETED_DEVICE_FAMILY: "1"
+        # 없으면 업로드할 때마다 수출 규정 질문을 사람이 손으로 답해야 한다.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

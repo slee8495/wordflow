@@ -1,0 +1,8 @@
+# XcodeGen 이 project.yml 에서 만들어 낸다. 커밋하면 사람이 못 고칠 파일이 충돌 지점이
+# 될 뿐이다 — 스펙 하나만 진짜로 둔다.
+#
+# 이름에 * 를 붙인 건 iCloud 때문이다. 이 폴더는 iCloud 데스크탑 안에 있어서 iCloud 가
+# "Wordflow 2.xcodeproj" 같은 번호 붙은 복제본을 만든다. 정확한 이름만 적으면 그 복제본이
+# 무시되지 않고 커밋에 딸려 들어간다 — sl_strength 에 실제로 여섯 개가 올라가 있었다.
+Wordflow*.xcodeproj/
+build/
