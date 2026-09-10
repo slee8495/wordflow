@@ -1,5 +1,6 @@
 "use client";
 
+import { AppIconMark } from "@/lib/appIcon";
 import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
 
@@ -19,7 +20,13 @@ export function LandingScreen() {
   return (
     <div className="flex flex-col gap-10 py-6">
       <div className="flex flex-col items-center gap-4 text-center">
-        <span className="text-4xl">📖</span>
+        {/* The app's own icon, not an emoji — this is the one screen a first-time visitor
+            meets the brand on, and it should be the same mark they'll see on their home
+            screen afterwards. */}
+        <div className="flex flex-col items-center gap-2">
+          <AppIconMark size={60} radius={14} />
+          <span className="text-lg font-semibold tracking-tight text-[var(--ink)]">Wordflow</span>
+        </div>
         <h1 className="text-2xl font-semibold text-[var(--ink)]">{t("landing.tagline")}</h1>
         <p className="max-w-md text-sm text-[var(--ink-soft)]">{t("landing.subtitle")}</p>
         <button
