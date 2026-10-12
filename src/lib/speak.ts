@@ -21,6 +21,11 @@
 // starts, so stale audio never gets played.
 import { spellOutKoreanNumbers } from "@/lib/koreanNumbers";
 
+// /api/speak answers fresh audio with a year-long immutable Cache-Control, so the browser (and the
+// app's web view) would keep replaying the previous voice for any chunk it has already fetched.
+// Bump this whenever the voice changes; the server ignores it.
+const VOICE_VERSION = "aoede";
+
 const audioBufferCache = new Map<string, ArrayBuffer>();
 const inFlight = new Map<string, Promise<ArrayBuffer | null>>();
 // Reused across sessions instead of a fresh `new Audio()` every time — see the file header for
@@ -183,7 +188,7 @@ async function fetchWithRetry(text: string, attempts = 3): Promise<ArrayBuffer> 
   for (let i = 0; i < attempts; i++) {
     if (i > 0) await sleep(400 * i);
     try {
-      const res = await fetch(`/api/speak?text=${encodeURIComponent(text)}`);
+      const res = await fetch(`/api/speak?text=${encodeURIComponent(text)}&v=${VOICE_VERSION}`);
       if (!res.ok) throw new Error("tts request failed");
       return await res.arrayBuffer();
     } catch (err) {

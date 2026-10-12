@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
+    "@breezystack/lamejs": "^1.2.7",
     "@sentry/nextjs": "^10.69.0",
     "@vercel/blob": "^2.6.1",
     "@vercel/config": "^0.5.5",
