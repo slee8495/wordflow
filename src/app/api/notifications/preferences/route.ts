@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles } from "@/db/schema";
 import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { dropGate } from "@/lib/reminderGate";
 
 // Updates just the notification hour (0-23, in the profile's own timezone) for a profile that's
 // already subscribed — lets Settings change "what time" without re-running the whole permission/
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const profile = await requireProfile();
     await db.update(profiles).set({ notificationHour }).where(eq(profiles.id, profile.id));
+    await dropGate(); // the cron's copy of who is due when is stale now
     return NextResponse.json({ status: "ok" });
   } catch (err) {
     const authResponse = authErrorResponse(err);

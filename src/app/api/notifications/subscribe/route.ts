@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles, pushSubscriptions } from "@/db/schema";
 import { authErrorResponse, requireProfile } from "@/lib/authProfile";
+import { dropGate } from "@/lib/reminderGate";
 
 function isValidTimezone(tz: unknown): tz is string {
   if (typeof tz !== "string" || !tz) return false;
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
         ...(notificationHour !== undefined ? { notificationHour } : {}),
       })
       .where(eq(profiles.id, profile.id));
+    await dropGate(); // the cron's copy of who is due when is stale now
 
     return NextResponse.json({ status: "ok" });
   } catch (err) {
