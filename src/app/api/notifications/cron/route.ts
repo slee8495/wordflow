@@ -6,6 +6,8 @@ import { peekCurrentCurriculumItem } from "@/lib/generateReading";
 import { DEFAULT_NOTIFICATION_HOUR, profileDateString, profileHour } from "@/lib/date";
 import { formatPassageRefEnglish, formatPassageRefKorean } from "@/lib/passageRef";
 import { getWebPush } from "@/lib/webPush";
+import { gateSaysCheck, readGate, writeGate } from "@/lib/reminderGate";
+import { DEFAULT_TIMEZONE } from "@/lib/date";
 
 export const maxDuration = 60;
 
@@ -31,7 +33,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Nobody's reminder hour has arrived → answer without opening the DB, so Neon can sleep
+  // between pings (src/lib/reminderGate.ts).
+  const gate = await readGate();
+  if (gate && !gateSaysCheck(gate)) return NextResponse.json({ status: "ok", sent: 0, skipped: "gate" });
+
   const due = await db.select().from(profiles).where(eq(profiles.notificationsEnabled, true));
+  const remindedToday = new Map<number, string>();
 
   let sent = 0;
   let skipped = 0;
@@ -92,7 +100,16 @@ export async function GET(req: NextRequest) {
     }
 
     await db.update(profiles).set({ lastNotifiedDate: today }).where(eq(profiles.id, profile.id));
+    remindedToday.set(profile.id, today);
   }
+
+  await writeGate(
+    due.map((p) => ({
+      tz: p.timezone ?? DEFAULT_TIMEZONE,
+      hour: p.notificationHour ?? DEFAULT_NOTIFICATION_HOUR,
+      last: remindedToday.get(p.id) ?? p.lastNotifiedDate ?? null,
+    })),
+  );
 
   return NextResponse.json({ status: "ok", sent, skipped });
 }

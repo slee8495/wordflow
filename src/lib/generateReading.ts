@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { dropGate } from "./reminderGate";
 import {
   curriculumItems,
   profiles,
@@ -566,6 +567,8 @@ export async function getReadingsForDate(profile: Profile, forDate: string) {
 export async function syncProfileTimezone(profile: Profile, timezone: string | null | undefined): Promise<Profile> {
   if (!timezone || profile.timezone === timezone) return profile;
   const [updated] = await db.update(profiles).set({ timezone }).where(eq(profiles.id, profile.id)).returning();
+  // A new timezone moves this profile's reminder hour — the cron's copy is stale (reminderGate.ts).
+  if (profile.notificationsEnabled) await dropGate();
   return updated ?? profile;
 }
 
