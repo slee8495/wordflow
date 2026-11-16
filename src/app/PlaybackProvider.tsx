@@ -64,7 +64,14 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Guards a stale resume() from settling after a newer pause/resume. Kept separate from genRef on
+  // purpose: playText()'s onChunkStart/finish callbacks compare genRef against the gen they started
+  // with, so resume() bumping genRef silently dropped every highlight update after a pause→resume
+  // (the highlight froze on the sentence you paused on).
+  const resumeSeqRef = useRef(0);
+
   const pause = useCallback(() => {
+    resumeSeqRef.current++;
     setSpeakState((cur) => {
       if (cur !== "playing") return cur;
       pauseSpeaking();
@@ -74,10 +81,12 @@ export function PlaybackProvider({ children }: { children: React.ReactNode }) {
 
   const resume = useCallback(() => {
     if (speakStateRef.current !== "paused") return;
-    const gen = ++genRef.current;
+    const gen = genRef.current;
+    const seq = ++resumeSeqRef.current;
     setSpeakState("loading");
     resumeSpeaking().then((ok) => {
-      if (genRef.current !== gen) return; // superseded by a newer action before this settled
+      // superseded by a newer playText()/stop()/pause()/resume() before this settled
+      if (genRef.current !== gen || resumeSeqRef.current !== seq) return;
       if (ok) {
         setSpeakState("playing");
         return;
