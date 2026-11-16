@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings, users } from "@/db/schema";
 import { profileDateString } from "@/lib/date";
@@ -56,11 +56,26 @@ export async function GET(req: NextRequest) {
     .from(readings)
     .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
     .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, today), eq(readings.revealed, true)))
+    .orderBy(desc(readings.createdAt))
     .limit(1);
 
-  // What the next reading would be, for the days it has not been opened yet. Peeked from the
-  // cursor rather than generated.
-  const [next] = todays
+  // On a day it has not been opened yet, the Today tab keeps showing the last revealed reading
+  // until "read next" is tapped (getTodayReadings) — so that is the reading that is "up". The
+  // cursor is NOT: it already sits past that reading *and* past the hidden prefetch buffer
+  // (ensurePrefetchedNext advances it), so peeking it said 신명기 6장 while the app showed 4장
+  // (owner, 2026-11-16: "오늘 신명기 4장 읽을 차례인데 브라우니는 6장이래").
+  const [shown] = todays
+    ? []
+    : await db
+        .select({ theme: readings.theme, passageRef: curriculumItems.passageRef, book: curriculumItems.book })
+        .from(readings)
+        .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
+        .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, true)))
+        .orderBy(desc(readings.createdAt))
+        .limit(1);
+
+  // Only for a profile that has never revealed anything: peek the cursor rather than generate.
+  const [next] = todays || shown
     ? []
     : await db
         .select({ passageRef: curriculumItems.passageRef, book: curriculumItems.book, theme: curriculumItems.theme })
@@ -83,7 +98,7 @@ export async function GET(req: NextRequest) {
     today,
     lastReadDate: profile.lastReadDate,
     readToday: Boolean(todays),
-    reading: todays ?? next ?? null,
+    reading: todays ?? shown ?? next ?? null,
     progress: {
       position: profile.cursorPosition,
       planLength,
