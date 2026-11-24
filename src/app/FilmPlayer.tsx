@@ -5,6 +5,12 @@ import { useEffect, useRef, useState } from "react";
 export type FilmCue = { start: number; end: number; text: string };
 export type Film = { videoUrl: string; posterUrl: string | null; cues: FilmCue[] | null; durationSec: number | null };
 
+// The subtitle to show at playback time t. Held a beat past each cue's end so it doesn't blink out
+// during the short pause between narrated sentences.
+export function cueAt(cues: FilmCue[] | null | undefined, t: number): string | null {
+  return cues?.find((c) => t >= c.start && t < c.end + 0.25)?.text ?? null;
+}
+
 // "영상으로 보기": the nightly-made film (photoreal scenes + the app's reading voice) with the
 // Korean narration shown as a subtitle under the picture rather than burned into it, so it stays
 // readable at any font size and doesn't cover the scene.
@@ -25,9 +31,7 @@ export function FilmPlayer({
   }, [pause]);
 
   function onTime() {
-    const t = videoRef.current?.currentTime ?? 0;
-    const hit = film.cues?.find((c) => t >= c.start && t < c.end + 0.25);
-    setCue(hit?.text ?? null);
+    setCue(cueAt(film.cues, videoRef.current?.currentTime ?? 0));
   }
 
   return (
