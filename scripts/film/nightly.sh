@@ -6,6 +6,13 @@
 # that have never had one — re-renders, narration (/api/speak) and images (local mflux) are free.
 cd "$(dirname "$0")/../.." || exit 1
 export PATH="/Users/stanlee/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+# Time limit that kills the whole process tree. `perl -e 'alarm shift; exec @ARGV'` only killed
+# npx and left tsx/node (and the mflux it spawned) running past the ceiling (2026-11-25).
+with_timeout() {
+  perl -e '$t = shift; $p = fork; if (!$p) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { kill "TERM", -$p; sleep 10; kill "KILL", -$p; $to = 1 };
+    alarm $t; waitpid($p, 0); exit($to ? 124 : $? >> 8)' "$@"
+}
 HOME_DIR="$HOME/.slstudio/wordflow-film"
 LOG="$HOME_DIR/logs/nightly.log"
 LOCK="$HOME_DIR/.lock"
@@ -32,5 +39,5 @@ export FILM_ALLOW_CLAUDE=1
 # 컨트롤 타워 예산 게이트 — 넘기라고 하면 이번 차례는 모델을 부르지 않는다(대본이 이미 있는 회분은 그대로 만든다). 타워가 없거나 고장이면 그냥 진행.
 TOWER_GATE="$HOME/.slstudio/tower/gate"; if [ -x "$TOWER_GATE" ] && ! "$TOWER_GATE" wordflow-film; then log "control tower: no Claude this run"; export FILM_ALLOW_CLAUDE=0; fi
 
-perl -e 'alarm shift; exec @ARGV' 14400 npx tsx --env-file=.env.local scripts/film/nightly.ts >> "$LOG" 2>&1
+with_timeout 14400 npx tsx --env-file=.env.local scripts/film/nightly.ts >> "$LOG" 2>&1
 log "nightly exited $?"
