@@ -4,6 +4,13 @@ import { db } from "@/db";
 import { curriculumItems, profiles, readings } from "@/db/schema";
 import { getTodayReadings } from "@/lib/generateReading";
 
+// These cases are about the normal rotation; pin "no active season" so they don't fail whenever
+// the suite happens to run during Holy Week / Christmas / Thanksgiving.
+vi.mock("@/lib/season", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/season")>();
+  return { ...actual, getActiveSeason: () => null };
+});
+
 // getTodayReadings schedules its background prefetch via next/server's after(), which throws
 // outside a real request scope (which this test isn't running in). Stub it to a no-op — the
 // prefetch itself would otherwise also trigger a real (slow, costly) AI content generation call,
@@ -21,9 +28,9 @@ vi.mock("next/server", async (importOriginal) => {
 // calendar day must not silently reveal the next curriculum item on its own — the profile should
 // keep seeing whatever was last revealed until they explicitly tap "read next" (generateNextReading).
 //
-// Assumes no active season window (Holy Week/Christmas/Thanksgiving) when run — during one of
-// those, getTodayReadings would correctly swap in that day's season reading instead, which is the
-// one deliberate exception to "stay" (see activeSeasonItemFor's comment in generateReading.ts).
+// Runs with no active season window (mocked above) — during one, getTodayReadings would correctly
+// swap in that day's season reading instead, the one deliberate exception to "stay" (see
+// activeSeasonItemFor's comment in generateReading.ts and the .season.test.ts sibling).
 
 const testProfileName = `test-today-${Date.now()}`;
 let createdProfileId: number | null = null;

@@ -509,9 +509,34 @@ export async function getTodayReadings(profile: Profile) {
 
     if (!latest) return [await buildFirstReadingOfDay(profile, forDate)];
 
+    // A new season day swaps its reading in once — not again every time the app is reopened after
+    // a "read next" past it (that used to insert a second copy of the day's season reading and,
+    // for that one load, hide everything else read that day). Once today's season reading exists,
+    // fall through to the normal "everything shown today" list, which already includes it.
     const seasonItem = await activeSeasonItemFor(profile);
     if (seasonItem && seasonItem.id !== latest.curriculumItemId) {
-      return [await buildReadingForItem(profile, forDate, seasonItem)];
+      const [already] = await db
+        .select({ id: readings.id })
+        .from(readings)
+        .where(
+          and(
+            eq(readings.profileId, profile.id),
+            eq(readings.curriculumItemId, seasonItem.id),
+            eq(readings.forDate, forDate),
+            eq(readings.revealed, true),
+          ),
+        )
+        .limit(1);
+      if (!already) {
+        const built = await buildReadingForItem(profile, forDate, seasonItem);
+        // The new day starts with the season reading, but anything already read earlier today
+        // (e.g. a reading revealed just after midnight) still belongs on today's list.
+        return db
+          .select()
+          .from(readings)
+          .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, built.forDate), eq(readings.revealed, true)))
+          .orderBy(readings.createdAt);
+      }
     }
 
     return db
