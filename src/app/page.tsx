@@ -14,12 +14,14 @@ import { usePlayback } from "./PlaybackProvider";
 import { useTimezone } from "./TimezoneProvider";
 import { useUiLanguage } from "./UiLanguageProvider";
 import { useUser } from "./UserProvider";
+import { FilmPlayer, type Film } from "./FilmPlayer";
 
 const sectionSourceId = (id: string) => `today-${id}`;
 
 type WorshipLink = { title: string; url: string };
 type Reading = {
   forDate: string;
+  curriculumItemId: number;
   theme: string;
   themeEn: string | null;
   storySummary: string;
@@ -142,6 +144,10 @@ export default function Home() {
   const [error, setError] = useState<UiStringKey | null>(null);
   const [passageView, setPassageView] = useState<"verses" | "story">("verses");
   const [generatingNext, setGeneratingNext] = useState(false);
+  // "영상으로 보기" — only offered when the nightly loop has a film ready for this passage. The
+  // choice is remembered per device, so someone who prefers watching lands on the film next time.
+  const [film, setFilm] = useState<Film | null>(null);
+  const [mode, setMode] = useState<"read" | "watch">("read");
   // null means "current" — the only mode that can generate new readings (via readNext below).
   // Any other value is a past date being browsed read-only via /api/reading/history. In "current"
   // mode the app no longer auto-advances just because the real calendar date changed — it stays on
@@ -218,6 +224,41 @@ export default function Home() {
       .catch(() => setError("errors.loadToday"))
       .finally(() => setLoading(false));
   }, [name, plan?.hasAccess, timezone, viewDate]);
+
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem("wordflow.todayMode") === "watch") setMode("watch");
+    } catch {
+      // storage blocked — default to reading
+    }
+  }, []);
+
+  function chooseMode(next: "read" | "watch") {
+    setMode(next);
+    try {
+      localStorage.setItem("wordflow.todayMode", next);
+    } catch {
+      // storage blocked — the choice just won't be remembered
+    }
+  }
+
+  const currentItemId = readings[index]?.curriculumItemId ?? null;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilm(null);
+    if (!currentItemId || uiLang !== "ko") return;
+    let cancelled = false;
+    fetch(`/api/film?item=${currentItemId}`)
+      .then((res) => (res.ok ? res.json() : { film: null }))
+      .then(({ film }: { film: Film | null }) => {
+        if (!cancelled) setFilm(film);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentItemId, uiLang]);
 
   function goToPreviousDay() {
     setViewDate(shiftDateString(effectiveDate, -1));
@@ -342,6 +383,28 @@ export default function Home() {
             <h1 className="text-lg font-semibold">{pick(reading.themeEn, reading.theme)}</h1>
           </div>
 
+          {film && (
+            <div className="flex gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] p-1">
+              {(["read", "watch"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => chooseMode(m)}
+                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${
+                    mode === m
+                      ? "bg-[var(--clay-deep)] text-[var(--paper-raised)]"
+                      : "text-[var(--ink-soft)] hover:bg-[var(--clay-tint)]"
+                  }`}
+                >
+                  {m === "read" ? "📖 글로 읽기" : "🎬 영상으로 보기"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {film && mode === "watch" && (
+            <FilmPlayer film={film} onPlay={stop} pause={globalSpeakState === "playing"} />
+          )}
+
           <Section
             title={t("today.contextTitle")}
             onSpeak={() => {
@@ -362,7 +425,8 @@ export default function Home() {
             />
           </Section>
 
-          {(reading.passageTextKoVerses || reading.passageTextKoStory || reading.passageTextEn) && (
+          {!(film && mode === "watch") &&
+            (reading.passageTextKoVerses || reading.passageTextKoStory || reading.passageTextEn) && (
             <Section
               title={t("today.passageTitle")}
               subtitle={rangeLabel}

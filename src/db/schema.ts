@@ -11,6 +11,7 @@ import {
   unique,
   boolean,
   primaryKey,
+  real,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -347,6 +348,34 @@ export const referralGrants = pgTable("referral_grants", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// "영상으로 보기" — a narrated film of one curriculum item's passage (photoreal stills with slow
+// camera motion, the app's own Gemini reading voice, Korean subtitle cues). Made on the operator's
+// Mac by a nightly loop (scripts/film/), never by the web app: only the few readings just ahead of
+// the operator's own progress have a video at any time. Once a reading is passed the video is
+// deleted from Blob but `script` stays (scene prompts + seeds + narration text), so the next cycle
+// through the curriculum can re-render the same film without asking Claude again.
+// status: "ready" (videoUrl set) | "archived" (video deleted, script kept)
+export const films = pgTable("films", {
+  id: serial("id").primaryKey(),
+  curriculumItemId: integer("curriculum_item_id")
+    .notNull()
+    .unique()
+    .references(() => curriculumItems.id),
+  lang: varchar("lang", { length: 8 }).default("ko").notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  script: jsonb("script").$type<FilmScript>().notNull(),
+  cues: jsonb("cues").$type<FilmCue[] | null>(),
+  videoUrl: text("video_url"),
+  posterUrl: text("poster_url"),
+  durationSec: real("duration_sec"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type FilmScene = { prompt: string; seed: number; text: string };
+export type FilmScript = { title: string; style: string; scenes: FilmScene[] };
+export type FilmCue = { start: number; end: number; text: string };
+
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type CurriculumItem = typeof curriculumItems.$inferSelect;
@@ -354,3 +383,4 @@ export type Reading = typeof readings.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type FamilyMembership = typeof familyMemberships.$inferSelect;
 export type ReferralGrant = typeof referralGrants.$inferSelect;
+export type Film = typeof films.$inferSelect;
