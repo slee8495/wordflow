@@ -402,7 +402,12 @@ export default function Home() {
           )}
 
           {film && mode === "watch" && (
-            <FilmPlayer film={film} onPlay={stop} pause={globalSpeakState === "playing"} />
+            <FilmPlayer
+              film={film}
+              vttUrl={`/api/film/vtt?item=${currentItemId}`}
+              onPlay={stop}
+              pause={globalSpeakState === "playing"}
+            />
           )}
 
           <Section
