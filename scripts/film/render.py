@@ -17,7 +17,7 @@ from pathlib import Path
 
 VENV = Path.home() / ".slstudio/wordflow-film/venv"
 W, H, FPS, X = 1344, 768, 30, 1.0
-LEAD_FIRST, LEAD, GAP, TAIL = 3.0, 0.6, 0.45, 1.0
+LEAD_FIRST, LEAD, GAP, TAIL = 3.0, 0.4, 0.3, 0.8
 SR = 24000
 
 
