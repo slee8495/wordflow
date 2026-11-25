@@ -3,7 +3,7 @@
 // orderIndex uses a dedicated 100000+ range so they can never collide with the normal rotation
 // (now 0..1188 — one entry per Bible chapter, see curriculumData.ts), and every query that walks
 // the normal cursor filters `season IS NULL` (see src/lib/generateReading.ts and
-// src/lib/progress.ts). Looked up by (season, seasonDayIndex) via getActiveSeason() in
+// src/lib/progress.ts). No longer served (2026-11-25 user: seasons removed); kept as data. Was looked up via
 // src/lib/season.ts.
 //
 // Bumped from the original 1000+ range to 100000+ when the main rotation grew from 49 entries to

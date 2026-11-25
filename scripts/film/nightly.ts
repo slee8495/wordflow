@@ -2,8 +2,7 @@
 // scripts/film/nightly.sh), never on Vercel.
 //
 // 1. Works out what the operator's profile will read next: the reading on screen now plus the next
-//    AHEAD (3) normal curriculum readings after the last revealed one, plus any season day
-//    (Thanksgiving/Christmas/Holy Week, see src/lib/season.ts) in the next AHEAD days on top.
+//    AHEAD (3) curriculum readings after the last revealed one (2026-11-25: no seasons any more).
 // 2. For each without a ready film: reuses the saved script if one exists (a passage seen on an
 //    earlier cycle), otherwise asks `claude -p` once for a scene script; narrates each sentence
 //    with the app's own /api/speak voice; renders stills + motion locally (render.py); uploads the
@@ -23,8 +22,6 @@ import { del, put } from "@vercel/blob";
 import { db } from "@/db";
 import { curriculumItems, films, profiles, readings, users, type CurriculumItem, type FilmScript } from "@/db/schema";
 import { peekCurrentCurriculumItem } from "@/lib/generateReading";
-import { profileDateString, shiftDateString } from "@/lib/date";
-import { getActiveSeason } from "@/lib/season";
 import { fetchNltPassage } from "@/lib/bible";
 import { spellOutKoreanNumbers } from "@/lib/koreanNumbers";
 import { formatPassageRefKorean } from "@/lib/passageRef";
@@ -70,18 +67,6 @@ export async function computeTargets(): Promise<CurriculumItem[]> {
 
   push(await peekCurrentCurriculumItem(profile));
 
-  const today = profileDateString(profile);
-  for (let d = 1; d <= AHEAD; d++) {
-    const s = getActiveSeason(shiftDateString(today, d));
-    if (!s) continue;
-    const [it] = await db
-      .select()
-      .from(curriculumItems)
-      .where(and(eq(curriculumItems.season, s.season), eq(curriculumItems.seasonDayIndex, s.dayIndex)))
-      .limit(1);
-    push(it);
-  }
-
   const [total] = await db
     .select({ n: sql<number>`count(*)` })
     .from(curriculumItems)
@@ -95,8 +80,6 @@ export async function computeTargets(): Promise<CurriculumItem[]> {
     .orderBy(desc(readings.createdAt))
     .limit(1);
   let pos = last ? last.orderIndex : profile.cursorPosition - 1;
-  // 2026-11-25 user: a season reading shows once a day and "read next" goes back to the normal
-  // curriculum, so season days don't eat into the AHEAD normal readings — they're filmed on top.
   let regular = 0;
   for (let guard = 0; regular < AHEAD && guard < 20 && len > 0; guard++) {
     pos = (pos + 1) % len;
