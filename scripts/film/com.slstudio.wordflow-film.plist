@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Installed at ~/Library/LaunchAgents/com.slstudio.wordflow-film.plist (launchctl load it).
+     ProcessType Interactive matters: with launchd's default background limits the MLX image model
+     ran at ~25GB peak / ~17 min per image and pushed the Mac into 18GB of swap (2026-11-25);
+     as Interactive it's ~5GB / ~2.5 min, same as running it from a terminal. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.slstudio.wordflow-film</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/stanlee/.slstudio/wordflow-film/launch.sh</string>
+  </array>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardErrorPath</key><string>/Users/stanlee/.slstudio/wordflow-film/logs/launchd.err</string>
+</dict>
+</plist>

@@ -2,7 +2,7 @@
 // scripts/film/nightly.sh), never on Vercel.
 //
 // 1. Works out what the operator's profile will read next: the reading on screen now plus the next
-//    AHEAD (3) — upcoming season days (Thanksgiving/Christmas/Holy Week override the rotation, see
+//    AHEAD (10) — upcoming season days (Thanksgiving/Christmas/Holy Week override the rotation, see
 //    src/lib/season.ts) first, then the normal curriculum after the last revealed reading.
 // 2. For each without a ready film: reuses the saved script if one exists (a passage seen on an
 //    earlier cycle), otherwise asks `claude -p` once for a scene script; narrates each sentence
@@ -29,7 +29,8 @@ import { fetchNltPassage } from "@/lib/bible";
 import { spellOutKoreanNumbers } from "@/lib/koreanNumbers";
 import { formatPassageRefKorean } from "@/lib/passageRef";
 
-const AHEAD = 3;
+// How many readings past the current one to keep filmed (2026-11-25 user: 3 → 10, "읽어보니 너무 재밌다").
+const AHEAD = Number(process.env.FILM_AHEAD ?? 10);
 const HOME = path.join(os.homedir(), ".slstudio/wordflow-film");
 const WORK = path.join(HOME, "work");
 const PY = path.join(HOME, "venv/bin/python");

@@ -32,5 +32,5 @@ export FILM_ALLOW_CLAUDE=1
 # 컨트롤 타워 예산 게이트 — 넘기라고 하면 이번 차례는 모델을 부르지 않는다(대본이 이미 있는 회분은 그대로 만든다). 타워가 없거나 고장이면 그냥 진행.
 TOWER_GATE="$HOME/.slstudio/tower/gate"; if [ -x "$TOWER_GATE" ] && ! "$TOWER_GATE" wordflow-film; then log "control tower: no Claude this run"; export FILM_ALLOW_CLAUDE=0; fi
 
-perl -e 'alarm shift; exec @ARGV' 14400 npx tsx --env-file=.env.local scripts/film/nightly.ts >> "$LOG" 2>&1
+perl -e 'alarm shift; exec @ARGV' 21600 npx tsx --env-file=.env.local scripts/film/nightly.ts >> "$LOG" 2>&1
 log "nightly exited $?"
