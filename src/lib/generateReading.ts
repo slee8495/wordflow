@@ -16,7 +16,6 @@ import { MODEL } from "@/lib/ai/model";
 import { fetchNltPassage } from "@/lib/bible";
 import { searchWorshipSongs } from "@/lib/youtube";
 import { profileDateString } from "@/lib/date";
-import { getActiveSeason } from "@/lib/season";
 
 // Postgres advisory locks share one global keyspace, so two different lock uses (per-profile vs.
 // per-curriculum-item, below) need distinct namespaces or a profile id could collide with an
@@ -437,34 +436,10 @@ async function ensurePrefetchedNext(profileId: number): Promise<void> {
   });
 }
 
-// Looks up today's season-specific curriculum item (Holy Week / Christmas / Thanksgiving — see
-// src/lib/season.ts), or null outside any active window. Seasons are the one deliberate exception
-// to the "stay on whatever was last revealed" rule below: they're an intentional day-by-day
-// series, so each new season day is still meant to swap in automatically.
-async function activeSeasonItemFor(profile: Profile): Promise<CurriculumItem | null> {
-  const activeSeason = getActiveSeason(profileDateString(profile));
-  if (!activeSeason) return null;
-  const [seasonItem] = await db
-    .select()
-    .from(curriculumItems)
-    .where(
-      and(
-        eq(curriculumItems.season, activeSeason.season),
-        eq(curriculumItems.seasonDayIndex, activeSeason.dayIndex),
-      ),
-    )
-    .limit(1);
-  return seasonItem ?? null;
-}
-
-// The very first reading a brand-new profile ever gets: if today falls in an active season
-// window, serves that season's reading instead of the normal rotation, without touching the
-// cursor at all. Because the cursor is untouched, any *subsequent* reading that day (via "read
-// next", which always calls buildReading directly, bypassing this function) falls straight back
-// to normal progress, and the cursor resumes exactly where it was once the season window closes.
+// The very first reading a brand-new profile ever gets. 2026-11-25 user: seasons (Holy Week /
+// Christmas / Thanksgiving) are gone — the curriculum just runs straight on, so this is the normal
+// rotation. Season rows stay in curriculum_items but nothing serves them any more.
 async function buildFirstReadingOfDay(profile: Profile, forDate: string) {
-  const seasonItem = await activeSeasonItemFor(profile);
-  if (seasonItem) return buildReadingForItem(profile, forDate, seasonItem);
   return revealOrGenerate(profile, forDate);
 }
 
@@ -492,9 +467,8 @@ export async function generateNextReading(profile: Profile) {
 // through however many times someone has read ahead in one sitting (via "read next"). Opening the
 // app on a later calendar day does NOT walk this forward on its own — the profile stays on
 // whatever was last revealed (and any others sharing its forDate) until they explicitly tap "read
-// next" (see generateNextReading). The one exception is an active season window: that's an
-// intentional day-by-day series, so a new season day still swaps in automatically even without a
-// "read next" tap. Generates the very first reading ever for a brand-new profile, same as before.
+// next" (see generateNextReading). Generates the very first reading ever for a brand-new profile,
+// same as before.
 export async function getTodayReadings(profile: Profile) {
   const forDate = profileDateString(profile);
   after(() => ensurePrefetchedNext(profile.id));
@@ -508,36 +482,6 @@ export async function getTodayReadings(profile: Profile) {
       .limit(1);
 
     if (!latest) return [await buildFirstReadingOfDay(profile, forDate)];
-
-    // A new season day swaps its reading in once — not again every time the app is reopened after
-    // a "read next" past it (that used to insert a second copy of the day's season reading and,
-    // for that one load, hide everything else read that day). Once today's season reading exists,
-    // fall through to the normal "everything shown today" list, which already includes it.
-    const seasonItem = await activeSeasonItemFor(profile);
-    if (seasonItem && seasonItem.id !== latest.curriculumItemId) {
-      const [already] = await db
-        .select({ id: readings.id })
-        .from(readings)
-        .where(
-          and(
-            eq(readings.profileId, profile.id),
-            eq(readings.curriculumItemId, seasonItem.id),
-            eq(readings.forDate, forDate),
-            eq(readings.revealed, true),
-          ),
-        )
-        .limit(1);
-      if (!already) {
-        const built = await buildReadingForItem(profile, forDate, seasonItem);
-        // The new day starts with the season reading, but anything already read earlier today
-        // (e.g. a reading revealed just after midnight) still belongs on today's list.
-        return db
-          .select()
-          .from(readings)
-          .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, built.forDate), eq(readings.revealed, true)))
-          .orderBy(readings.createdAt);
-      }
-    }
 
     return db
       .select()
@@ -600,14 +544,11 @@ export async function syncProfileTimezone(profile: Profile, timezone: string | n
 // Read-only: reports whichever curriculum item is CURRENTLY being shown to the profile — the same
 // thing getTodayReadings would return, without generating or advancing anything — so the
 // morning-reminder cron's notification always describes what's actually on screen right now
-// (season item, else the latest revealed reading), never the buffered "next" item that only shows
+// (the latest revealed reading), never the buffered "next" item that only shows
 // up once the profile explicitly taps "read next". Must NEVER call buildReading/getTodayReadings
 // itself, since this is used on a schedule and calling either of those would silently consume a
 // curriculum step for every profile whether or not they actually visited that day (see vercel.ts).
 export async function peekCurrentCurriculumItem(profile: Profile): Promise<CurriculumItem | null> {
-  const seasonItem = await activeSeasonItemFor(profile);
-  if (seasonItem) return seasonItem;
-
   const [latest] = await db
     .select({ curriculumItemId: readings.curriculumItemId })
     .from(readings)

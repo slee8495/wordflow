@@ -117,7 +117,7 @@ export const verificationTokens = pgTable(
 // (100000+, see seasonCurriculumData.ts) and every query that computes the normal cursor's
 // curriculumLength or orderIndex range must filter `season IS NULL`, or a season/legacy row
 // sharing a book name with a normal entry (e.g. both "Luke") would corrupt the per-book progress
-// math. See src/lib/season.ts for the day-of-year lookup.
+// math. Seasons are no longer served (2026-11-25); the rows are kept.
 export const curriculumItems = pgTable("curriculum_items", {
   id: serial("id").primaryKey(),
   orderIndex: integer("order_index").notNull().unique(),
