@@ -2,8 +2,8 @@
 // scripts/film/nightly.sh), never on Vercel.
 //
 // 1. Works out what the operator's profile will read next: the reading on screen now plus the next
-//    AHEAD (3) — upcoming season days (Thanksgiving/Christmas/Holy Week override the rotation, see
-//    src/lib/season.ts) first, then the normal curriculum after the last revealed reading.
+//    AHEAD (3) normal curriculum readings after the last revealed one, plus any season day
+//    (Thanksgiving/Christmas/Holy Week, see src/lib/season.ts) in the next AHEAD days on top.
 // 2. For each without a ready film: reuses the saved script if one exists (a passage seen on an
 //    earlier cycle), otherwise asks `claude -p` once for a scene script; narrates each sentence
 //    with the app's own /api/speak voice; renders stills + motion locally (render.py); uploads the
@@ -95,16 +95,20 @@ export async function computeTargets(): Promise<CurriculumItem[]> {
     .orderBy(desc(readings.createdAt))
     .limit(1);
   let pos = last ? last.orderIndex : profile.cursorPosition - 1;
-  for (let guard = 0; out.length < 1 + AHEAD && guard < 20 && len > 0; guard++) {
+  // 2026-11-25 user: a season reading shows once a day and "read next" goes back to the normal
+  // curriculum, so season days don't eat into the AHEAD normal readings — they're filmed on top.
+  let regular = 0;
+  for (let guard = 0; regular < AHEAD && guard < 20 && len > 0; guard++) {
     pos = (pos + 1) % len;
     const [it] = await db
       .select()
       .from(curriculumItems)
       .where(and(eq(curriculumItems.orderIndex, pos), isNull(curriculumItems.season)))
       .limit(1);
+    if (it && !out.some((o) => o.id === it.id)) regular++;
     push(it);
   }
-  return out.slice(0, 1 + AHEAD);
+  return out;
 }
 
 // ---------- script (the only Claude step) ----------
