@@ -1,8 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { curriculumItems, profiles, readings } from "@/db/schema";
 import { peekCurrentCurriculumItem } from "@/lib/generateReading";
+
+// These cases are about the normal rotation; pin "no active season" so they don't fail whenever
+// the suite happens to run during Holy Week / Christmas / Thanksgiving.
+vi.mock("@/lib/season", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/season")>();
+  return { ...actual, getActiveSeason: () => null };
+});
 
 // Integration test against the real dev DB (no separate test DB exists — see vitest.setup.ts).
 // Only ever touches disposable rows it creates itself under a unique profile name, cleaned up in
