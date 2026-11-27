@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { curriculumItems, profiles, readings, users } from "@/db/schema";
+import { curriculumItems, films, profiles, readings, users } from "@/db/schema";
 import { profileDateString } from "@/lib/date";
 import { getReadingProgress } from "@/lib/progress";
 import { GLOSSARY } from "./glossary";
@@ -52,7 +52,12 @@ export async function GET(req: NextRequest) {
   const planLength = Number(count) || 0;
 
   const [todays] = await db
-    .select({ theme: readings.theme, passageRef: curriculumItems.passageRef, book: curriculumItems.book })
+    .select({
+      theme: readings.theme,
+      passageRef: curriculumItems.passageRef,
+      book: curriculumItems.book,
+      itemId: readings.curriculumItemId,
+    })
     .from(readings)
     .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
     .where(and(eq(readings.profileId, profile.id), eq(readings.forDate, today), eq(readings.revealed, true)))
@@ -67,7 +72,13 @@ export async function GET(req: NextRequest) {
   const [shown] = todays
     ? []
     : await db
-        .select({ theme: readings.theme, passageRef: curriculumItems.passageRef, book: curriculumItems.book })
+        .select({
+          theme: readings.theme,
+          passageRef: curriculumItems.passageRef,
+          book: curriculumItems.book,
+          itemId: readings.curriculumItemId,
+          forDate: readings.forDate,
+        })
         .from(readings)
         .innerJoin(curriculumItems, eq(curriculumItems.id, readings.curriculumItemId))
         .where(and(eq(readings.profileId, profile.id), eq(readings.revealed, true)))
@@ -88,6 +99,24 @@ export async function GET(req: NextRequest) {
         )
         .limit(1);
 
+  // The day a reading was last actually opened. NOT profile.lastReadDate: that column is only
+  // written by buildReading(), i.e. when the hidden prefetch buffer is *generated* — revealing
+  // it ("read next") never touches it. So it lagged behind: the owner read 신명기 23장 on 11-27
+  // and Brownie still said "성경은 11월 25일 이후 쉬고 있어요" (owner, 2026-11-27).
+  const lastOpenedDate = todays ? today : (shown?.forDate ?? profile.lastReadDate);
+
+  // Whether the reading that is up can be watched as a film (영상으로 보기, scripts/film/). The
+  // app records no difference between watching and reading — both end in the same "read next" —
+  // so this only says the video exists, not that it was watched.
+  const upItemId = todays?.itemId ?? shown?.itemId ?? null;
+  const [film] = upItemId
+    ? await db
+        .select({ durationSec: films.durationSec })
+        .from(films)
+        .where(and(eq(films.curriculumItemId, upItemId), eq(films.status, "ready")))
+        .limit(1)
+    : [];
+
   // The same numbers the progress dashboard shows — computed by the app's own function rather
   // than a second copy of the maths here. The per-book breakdown (66 rows) is dropped: an
   // assistant reads answers out loud, and a list that long is not an answer.
@@ -96,9 +125,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     profile: profile.name,
     today,
-    lastReadDate: profile.lastReadDate,
+    lastReadDate: lastOpenedDate,
     readToday: Boolean(todays),
     reading: todays ?? shown ?? next ?? null,
+    film: film ? { ready: true, minutes: film.durationSec ? Math.round(film.durationSec / 60) : null } : { ready: false },
     progress: {
       position: profile.cursorPosition,
       planLength,
